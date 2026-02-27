@@ -1,6 +1,6 @@
 import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
-import RadiusRing from "@/components/RadiusRing";
+import ProximityMap from "@/components/ProximityMap";
 import IntentBadge from "@/components/IntentBadge";
 import SuggestionCard from "@/components/SuggestionCard";
 import { Ghost } from "lucide-react";
@@ -53,9 +53,9 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* Radius Ring */}
-      <div className="flex justify-center py-6">
-        <RadiusRing />
+      {/* Map */}
+      <div className="px-4 py-4">
+        <ProximityMap innerRadius={1} outerRadius={5} />
       </div>
 
       {/* Suggestions */}

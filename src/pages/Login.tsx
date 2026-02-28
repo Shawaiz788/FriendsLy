@@ -11,11 +11,25 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    // Mock login - navigate to home
-    navigate("/home");
-  };
+    setError("");
+    setSuccess(false);
+    try {
+      const { error: apiError, session, user } = await (await import("@/lib/api")).loginUser({ email, password });
+      if (apiError) {
+        setError(apiError);
+      } else {
+        setSuccess(true);
+        // Store session here if needed
+        setTimeout(() => navigate("/home"), 1000);
+      }
+    } catch (err) {
+      setError("Login failed. Please try again.");
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background px-6 pt-4 pb-10">
@@ -77,6 +91,8 @@ const Login = () => {
           <Button variant="hero" size="xl" type="submit" className="w-full mt-6">
             Log In
           </Button>
+          {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+          {success && <div className="text-green-600 text-sm mt-2">Login successful! Redirecting...</div>}
         </form>
 
         <p className="text-sm text-muted-foreground mt-8">

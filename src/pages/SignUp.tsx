@@ -13,14 +13,41 @@ const SignUp = () => {
     name: "", email: "", phone: "", password: "", confirmPassword: "", consent: false,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
+    setSuccess(false);
     if (step === 1) {
       setStep(2);
     } else {
-      navigate("/home");
+      if (form.password !== form.confirmPassword) {
+        setError("Passwords do not match");
+        return;
+      }
+      if (!form.consent) {
+        setError("You must agree to the terms");
+        return;
+      }
+      try {
+        const { error: apiError, user } = await (await import("@/lib/api")).registerUser({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          password: form.password,
+        });
+        if (apiError) {
+          setError(apiError);
+        } else {
+          setSuccess(true);
+          setTimeout(() => navigate("/login"), 1500);
+        }
+      } catch (err) {
+        setError("Registration failed. Please try again.");
+      }
     }
-  };
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background px-6 pt-4 pb-10">
@@ -84,6 +111,8 @@ const SignUp = () => {
           <Button variant="hero" size="xl" type="submit" className="w-full mt-4">
             {step === 1 ? "Continue" : "Create Account"}
           </Button>
+          {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+          {success && <div className="text-green-600 text-sm mt-2">Account created! Redirecting...</div>}
         </form>
 
         <p className="text-sm text-muted-foreground mt-8">

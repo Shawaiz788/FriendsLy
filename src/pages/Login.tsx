@@ -23,7 +23,10 @@ const Login = () => {
         setError(apiError);
       } else {
         setSuccess(true);
-        // Store session here if needed
+        // Store session token for authenticated requests
+        if (session?.access_token) {
+          localStorage.setItem("supabaseToken", session.access_token);
+        }
         setTimeout(() => navigate("/home"), 1000);
       }
     } catch (err) {

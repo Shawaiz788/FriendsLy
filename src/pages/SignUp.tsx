@@ -6,11 +6,47 @@ import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import logoImg from "@/assets/logo.png";
 
 const SignUp = () => {
+    const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+    const [usernameMsg, setUsernameMsg] = useState('');
+
+    // Check username availability as user types
+    async function handleUsernameChange(e: React.ChangeEvent<HTMLInputElement>) {
+      const value = e.target.value;
+      setForm({ ...form, username: value });
+      if (!value) {
+        setUsernameStatus('idle');
+        setUsernameMsg('');
+        return;
+      }
+      setUsernameStatus('checking');
+      setUsernameMsg('Checking...');
+      try {
+        const result = await (await import("@/lib/api")).checkUsernameAvailability(value);
+        if (result.available) {
+          setUsernameStatus('available');
+          setUsernameMsg('Username available');
+        } else {
+          setUsernameStatus('taken');
+          setUsernameMsg('Username not available');
+        }
+      } catch {
+        setUsernameStatus('idle');
+        setUsernameMsg('');
+      }
+    }
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
-    name: "", email: "", phone: "", password: "", confirmPassword: "", consent: false,
+    name: "",
+    username: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    date_of_birth: "",
+    gender: "",
+    consent: false,
   });
 
   const [error, setError] = useState("");
@@ -33,9 +69,12 @@ const SignUp = () => {
       try {
         const { error: apiError, user } = await (await import("@/lib/api")).registerUser({
           name: form.name,
+          username: form.username,
           email: form.email,
           phone: form.phone,
           password: form.password,
+          date_of_birth: form.date_of_birth,
+          gender: form.gender,
         });
         if (apiError) {
           setError(apiError);
@@ -78,12 +117,33 @@ const SignUp = () => {
                 <Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} placeholder="Your name" className="h-12 rounded-xl bg-card border-border" />
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Username</label>
+                <Input value={form.username} onChange={handleUsernameChange} placeholder="Choose a username" className="h-12 rounded-xl bg-card border-border" />
+                {form.username && (
+                  <span className={`text-sm mt-1 ${usernameStatus === 'available' ? 'text-green-600' : usernameStatus === 'taken' ? 'text-red-500' : 'text-muted-foreground'}`}>{usernameMsg}</span>
+                )}
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Email</label>
                 <Input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} placeholder="you@example.com" className="h-12 rounded-xl bg-card border-border" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Phone</label>
                 <Input type="tel" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} placeholder="+1 234 567 890" className="h-12 rounded-xl bg-card border-border" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Date of Birth</label>
+                <Input type="date" value={form.date_of_birth} onChange={(e) => setForm({...form, date_of_birth: e.target.value})} className="h-12 rounded-xl bg-card border-border" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Gender</label>
+                <select value={form.gender} onChange={(e) => setForm({...form, gender: e.target.value})} className="h-12 rounded-xl bg-card border-border w-full">
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
               </div>
             </>
           ) : (

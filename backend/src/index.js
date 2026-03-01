@@ -3,6 +3,7 @@
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
+import multer from 'multer';
 import userRoutes from './routes/user.js';
 import dotenv from 'dotenv';
 
@@ -10,6 +11,9 @@ dotenv.config();
 
 const app = express();
 app.use(cors({ origin: 'http://localhost:8080', credentials: true }));
+
+// Setup multer for file uploads
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Supabase connection
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -21,12 +25,76 @@ app.use(express.json());
 
 // Shortcut routes for registration and login
 app.post('/register', async (req, res) => {
-	const { email, password } = req.body;
+	const { email, password, name, phone, username, photo, interests, date_of_birth, gender } = req.body;
+	console.log('========== REGISTRATION REQUEST ==========');
+	console.log('Full payload:', JSON.stringify(req.body, null, 2));
+	
+	// Validate required fields
+	if (!email || !password || !name || !username) {
+		console.log('VALIDATION FAILED - Missing required fields');
+		return res.status(400).json({ error: 'Missing required fields: email, password, name, username' });
+	}
+	console.log('VALIDATION PASSED');
+	
 	try {
-		const { data, error } = await supabase.auth.signUp({ email, password });
-		if (error) return res.status(400).json({ error: error.message });
-		res.json({ user: data.user });
+		// 1. Create auth user
+		console.log('Step 1: Creating auth user');
+		const { data: authData, error: authError } = await supabase.auth.signUp({ email, password, phone });
+		if (authError) {
+			console.log('Auth error:', authError);
+			return res.status(400).json({ error: authError.message });
+		}
+		console.log('Auth user created:', authData.user.id);
+		
+		// 2. Insert into users table
+		console.log('Step 2: Inserting into users table');
+		const { error: userError } = await supabase.from('users').insert([
+			{
+				user_id: authData.user.id,
+				email: email,
+				phone: phone,
+				password_hash: password
+			}
+		]);
+		if (userError) {
+			console.log('User insertion error:', userError);
+			return res.status(400).json({ error: userError.message });
+		}
+		console.log('User inserted successfully');
+		
+		// 3. Insert into user_profiles table
+		console.log('Step 3: Inserting into user_profiles');
+		console.log('Inserting with data:', {
+			user_id: authData.user.id,
+			full_name: name,
+			username: username,
+			profile_photo_url: photo,
+			bio: interests,
+			date_of_birth: date_of_birth,
+			gender: gender
+		});
+		
+		const { data: profileData, error: profileError } = await supabase.from('user_profiles').insert([
+			{
+				user_id: authData.user.id,
+				full_name: name,
+				username: username,
+				profile_photo_url: photo,
+				bio: interests,
+				date_of_birth: date_of_birth,
+				gender: gender
+			}
+		]).select();
+		console.log('Profile insert response - data:', profileData);
+		console.log('Profile insert response - error:', profileError);
+		if (profileError) {
+			console.log('Profile insertion error details:', JSON.stringify(profileError, null, 2));
+			return res.status(400).json({ error: profileError.message });
+		}
+		console.log('Profile inserted successfully, data:', profileData);
+		res.json({ user: authData.user });
 	} catch (err) {
+		console.log('Exception:', err);
 		res.status(500).json({ error: err.message });
 	}
 });
@@ -40,6 +108,19 @@ app.post('/login', async (req, res) => {
 	} catch (err) {
 		res.status(500).json({ error: err.message });
 	}
+});
+
+// File upload route with multer middleware
+app.post('/api/user/upload-image', upload.single('file'), async (req, res) => {
+	const userRoutes = (await import('./routes/user.js')).default;
+	// This is a hack - call the controller directly
+	const UserController = (await import('./controllers/UserController.js')).default;
+	
+	const token = req.headers['authorization']?.replace('Bearer ', '');
+	req.supabaseToken = token;
+	req.app.set('supabase', supabase);
+	
+	await UserController.uploadImage(req, res);
 });
 
 app.use('/api/user', userRoutes);

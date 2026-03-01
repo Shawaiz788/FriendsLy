@@ -369,3 +369,61 @@ CREATE INDEX idx_messages_group ON messages(group_id);
 CREATE INDEX idx_stories_expiry ON stories(expires_at);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 
+-- ============================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- ============================================
+
+-- Enable RLS on friendships table
+ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
+
+-- Allow users to see incoming friend requests (where they are addressee)
+CREATE POLICY "Users can view incoming friend requests"
+ON friendships
+FOR SELECT
+USING (addressee_id = auth.uid());
+
+-- Allow users to see outgoing friend requests (where they are requester)
+CREATE POLICY "Users can view outgoing friend requests"
+ON friendships
+FOR SELECT
+USING (requester_id = auth.uid());
+
+-- Allow authenticated users to insert (send friend requests)
+CREATE POLICY "Authenticated users can send friend requests"
+ON friendships
+FOR INSERT
+WITH CHECK (requester_id = auth.uid());
+
+-- Allow users to update their incoming requests (accept/reject)
+CREATE POLICY "Users can update their incoming friend requests"
+ON friendships
+FOR UPDATE
+USING (addressee_id = auth.uid());
+
+-- Allow users to delete their requests
+CREATE POLICY "Users can delete friend requests they initiated"
+ON friendships
+FOR DELETE
+USING (requester_id = auth.uid() OR addressee_id = auth.uid());
+
+-- Enable RLS on user_profiles table for public viewing
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+-- Allow anyone to read public profiles
+CREATE POLICY "Anyone can view user profiles"
+ON user_profiles
+FOR SELECT
+USING (true);
+
+-- Allow users to update only their own profile
+CREATE POLICY "Users can update their own profile"
+ON user_profiles
+FOR UPDATE
+USING (user_id = auth.uid());
+
+-- Allow users to insert only their own profile
+CREATE POLICY "Users can insert their own profile"
+ON user_profiles
+FOR INSERT
+WITH CHECK (user_id = auth.uid());
+

@@ -11,6 +11,8 @@ import FriendsPage from "./pages/FriendsPage";
 import IntentPage from "./pages/IntentPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
+import SearchPage from "./pages/SearchPage";
+import UserProfilePage from "./pages/UserProfilePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,7 +32,8 @@ const App = () => (
           <Route path="/intent" element={<IntentPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="*" element={<NotFound />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/user/:userId" element={<UserProfilePage />} />          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

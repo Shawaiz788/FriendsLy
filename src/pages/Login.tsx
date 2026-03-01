@@ -26,6 +26,44 @@ const Login = () => {
         // Store session token for authenticated requests
         if (session?.access_token) {
           localStorage.setItem("supabaseToken", session.access_token);
+          
+          // Fetch and cache profile data immediately so it's ready when navigating to profile
+          try {
+            const resUser = await fetch("http://localhost:3001/api/user/me", {
+              headers: { "Authorization": `Bearer ${session.access_token}` },
+            });
+            const userJson = await resUser.json();
+            const userId = userJson?.user?.id;
+            
+            if (userId) {
+              const res = await fetch(`http://localhost:3001/api/user/download?id=${userId}`, {
+                headers: { "Authorization": `Bearer ${session.access_token}` },
+              });
+              const profileData = await res.json();
+              
+              if (profileData?.data?.length) {
+                // Sanitize blob URLs (old broken URLs in DB)
+                const rawPhotoUrl = profileData.data[0].profile_photo_url || "";
+                const sanitizedPhotoUrl = 
+                  typeof rawPhotoUrl === 'string' && rawPhotoUrl.startsWith('blob:') 
+                    ? '' 
+                    : rawPhotoUrl;
+                
+                const cached = {
+                  name: profileData.data[0].full_name || "",
+                  username: profileData.data[0].username || "",
+                  photo: sanitizedPhotoUrl,
+                  interests: profileData.data[0].bio || "",
+                  date_of_birth: profileData.data[0].date_of_birth || "",
+                  gender: profileData.data[0].gender || "",
+                };
+                localStorage.setItem("cachedProfile", JSON.stringify(cached));
+                console.log('✅ Profile cached on login:', cached.name);
+              }
+            }
+          } catch (cacheErr) {
+            console.error('Non-critical: Failed to cache profile on login', cacheErr);
+          }
         }
         setTimeout(() => navigate("/home"), 1000);
       }

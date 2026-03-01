@@ -24,6 +24,16 @@ router.delete('/delete', requireAuth, UserController.deleteAccount);
 router.get('/download', requireAuth, UserController.downloadData);
 router.post('/verify', requireAuth, UserController.verify);
 router.post('/logoutAll', requireAuth, UserController.logoutAll);
+
+// Friends & Search endpoints
+router.get('/search', requireAuth, UserController.searchUsers);
+router.get('/friends', requireAuth, UserController.getAcceptedFriends);
+router.get('/friend-requests/incoming', requireAuth, UserController.getIncomingFriendRequests);
+router.get('/:userId/profile', requireAuth, UserController.getUserProfile);
+router.get('/:userId/friend-status', requireAuth, UserController.getFriendRequestStatus);
+router.post('/friend-request/send', requireAuth, UserController.sendFriendRequest);
+router.post('/friend-request/accept', requireAuth, UserController.acceptFriendRequest);
+router.post('/friend-request/reject', requireAuth, UserController.rejectFriendRequest);
 // Session timeout handled via middleware
 
 export default router;

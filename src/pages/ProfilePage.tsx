@@ -18,7 +18,12 @@ async function fetchProfile(token) {
   const res = await fetch(`http://localhost:3001/api/user/download?id=${userId}`, {
     headers: { "Authorization": `Bearer ${token}` },
   });
-  return res.json();
+  const data = await res.json();
+  console.log('Profile data fetched:', data);
+  if (data?.data?.[0]) {
+    console.log('Profile photo URL:', data.data[0].profile_photo_url);
+  }
+  return data;
 }
 
 const ProfilePage = () => {
@@ -26,6 +31,8 @@ const ProfilePage = () => {
   const [ghostMode, setGhostMode] = useState(false);
   const [quietHours, setQuietHours] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [profile, setProfile] = useState<{
     name: string;
     username: string;
@@ -50,8 +57,24 @@ const ProfilePage = () => {
 
   useEffect(() => {
     const t = localStorage.getItem("supabaseToken");
-    if (t) setToken(t);
     if (t) {
+      setToken(t);
+      
+      // Try to load profile from cache first for instant display
+      const cachedProfile = localStorage.getItem("cachedProfile");
+      if (cachedProfile) {
+        try {
+          const cached = JSON.parse(cachedProfile);
+          const sanitizedCached = {
+            ...cached,
+            photo: typeof cached?.photo === 'string' && cached.photo.startsWith('blob:') ? '' : cached.photo,
+          };
+          setProfile(prev => ({ ...prev, ...sanitizedCached }));
+        } catch (e) {
+          console.error("Failed to parse cached profile:", e);
+        }
+      }
+      
       // Get user ID
       fetch("http://localhost:3001/api/user/me", {
         headers: { "Authorization": `Bearer ${t}` },
@@ -59,17 +82,25 @@ const ProfilePage = () => {
         if (data?.user?.id) setUserId(data.user.id);
       });
       
+      // Fetch fresh profile data
       fetchProfile(t).then((data) => {
         if (data?.data?.length) {
-          setProfile({
+          const rawPhotoUrl = data.data[0].profile_photo_url || "";
+          const sanitizedPhotoUrl = typeof rawPhotoUrl === 'string' && rawPhotoUrl.startsWith('blob:') ? '' : rawPhotoUrl;
+          const profileData = {
             name: data.data[0].full_name || "",
             username: data.data[0].username || "",
-            photo: data.data[0].profile_photo_url || "",
+            photo: sanitizedPhotoUrl,
             interests: data.data[0].bio || "",
             date_of_birth: data.data[0].date_of_birth || "",
             gender: data.data[0].gender || "",
             newPhotoFile: undefined
-          });
+          };
+          setProfile(profileData);
+          // Cache the profile for instant loading next time
+          localStorage.setItem("cachedProfile", JSON.stringify(profileData));
+          // Reset image error state when profile updates
+          setImageLoadError(false);
         }
       });
     }
@@ -79,15 +110,22 @@ const ProfilePage = () => {
     if (editSuccess && token) {
       fetchProfile(token).then((data) => {
         if (data?.data?.length) {
-          setProfile({
+          const rawPhotoUrl = data.data[0].profile_photo_url || "";
+          const sanitizedPhotoUrl = typeof rawPhotoUrl === 'string' && rawPhotoUrl.startsWith('blob:') ? '' : rawPhotoUrl;
+          const profileData = {
             name: data.data[0].full_name || "",
             username: data.data[0].username || "",
-            photo: data.data[0].profile_photo_url || "",
+            photo: sanitizedPhotoUrl,
             interests: data.data[0].bio || "",
             date_of_birth: data.data[0].date_of_birth || "",
             gender: data.data[0].gender || "",
             newPhotoFile: undefined
-          });
+          };
+          setProfile(profileData);
+          // Update cache
+          localStorage.setItem("cachedProfile", JSON.stringify(profileData));
+          // Reset image error state
+          setImageLoadError(false);
         }
       });
     }
@@ -139,7 +177,11 @@ const ProfilePage = () => {
           icon: LogOut,
           label: "Log Out",
           desc: "Sign out of your account",
-          action: () => navigate("/"),
+          action: () => {
+            localStorage.removeItem("supabaseToken");
+            localStorage.removeItem("cachedProfile");
+            navigate("/");
+          },
         },
         {
           icon: Trash2,
@@ -155,18 +197,26 @@ const ProfilePage = () => {
     e.preventDefault();
     setEditError("");
     setEditSuccess(false);
-    let photoUrl = profile.photo;
-    if (profile.newPhotoFile) {
-      // Show preview immediately
-      photoUrl = URL.createObjectURL(profile.newPhotoFile);
-      setProfile(prev => ({ ...prev, photo: photoUrl }));
-      // TODO: Upload image to Supabase storage and get real URL
-      // For now, just use preview URL
+    
+    // If user selected a file but it's still uploading
+    if (isUploadingImage) {
+      setEditError('⏳ Still uploading image... please wait');
+      return;
     }
+    
+    // If user is trying to save and has unsaved image, wait for it
+    if (profile.newPhotoFile && profile.photo.startsWith('blob:')) {
+      setEditError('⚠️ Please wait - image upload incomplete or wasn\'t processed. Try uploading again.');
+      return;
+    }
+    
+    // Use the already-uploaded URL from Supabase Storage (set in the file input onChange)
+    // profile.photo will contain the real Supabase URL if upload succeeded
+    console.log('Saving profile with photo URL:', profile.photo);
     const result = await editProfile({
       name: profile.name,
       username: profile.username,
-      photo: photoUrl,
+      photo: profile.photo,
       interests: profile.interests,
       date_of_birth: profile.date_of_birth,
       gender: profile.gender,
@@ -186,8 +236,24 @@ const ProfilePage = () => {
 
         {/* Profile card */}
         <div className="glass-card rounded-2xl p-5 flex items-center gap-4 mb-8 animate-float-in">
-          <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold">
-            {profile.photo ? <img src={profile.photo} alt="Profile" className="w-16 h-16 rounded-full object-cover" /> : <User className="w-7 h-7" />}
+          <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold flex-shrink-0 overflow-hidden">
+            {profile.photo && !imageLoadError ? (
+              <img 
+                src={profile.photo} 
+                alt="Profile" 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  console.error('Profile image failed to load from URL:', profile.photo);
+                  setImageLoadError(true);
+                }}
+                onLoad={() => {
+                  console.log('Profile image loaded successfully:', profile.photo);
+                  setImageLoadError(false);
+                }}
+              />
+            ) : (
+              <User className="w-7 h-7" />
+            )}
           </div>
           <div className="flex-1">
             <p className="font-semibold text-lg text-foreground">{profile.name || "Your Name"}</p>
@@ -204,35 +270,100 @@ const ProfilePage = () => {
               <label className="block mb-2">Name</label>
               <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} className="mb-4" />
               <label className="block mb-2">Photo URL</label>
-              <Input value={profile.photo} onChange={e => setProfile({ ...profile, photo: e.target.value })} className="mb-2" />
+              <Input 
+                value={profile.photo} 
+                onChange={e => {
+                  setProfile({ ...profile, photo: e.target.value });
+                  console.log('Manual photo URL set to:', e.target.value);
+                }} 
+                className="mb-2" 
+                placeholder="https://..."
+              />
+              {profile.photo && (
+                <div className="text-xs text-gray-500 mb-3 break-all">
+                  Current: {profile.photo.substring(0, 50)}...
+                </div>
+              )}
               <input type="file" accept="image/*" className="mb-4" onChange={async (e) => {
                 const file = e.target.files[0];
                 if (file && userId && token) {
-                  // Show preview immediately
-                  setProfile(prev => ({ ...prev, newPhotoFile: file, photo: URL.createObjectURL(file) }));
+                  // Show preview immediately with blob URL
+                  const blobUrl = URL.createObjectURL(file);
+                  console.log('File selected:', file.name);
+                  setProfile(prev => ({ ...prev, newPhotoFile: file, photo: blobUrl }));
+                  setEditError("");
+                  setIsUploadingImage(true);
+                  
                   // Upload to Supabase Storage
                   try {
+                    console.log('⬆️ Starting image upload:', file.name, 'Size:', file.size);
                     const result = await (await import("@/lib/api")).uploadProfileImage(file, userId, token);
-                    if (result.url) {
-                      setProfile(prev => ({ ...prev, photo: result.url }));
-                    } else if (result.error) {
-                      setEditError("Failed to upload image: " + result.error);
+                    console.log('📦 Upload response:', result);
+                    
+                    if (result?.url) {
+                      console.log('✅ Upload successful! URL:', result.url);
+                      
+                      if (result.url.startsWith('blob:')) {
+                        console.error('❌ Error: Got blob URL instead of real URL from server!', result.url);
+                        setEditError('Server returned temporary URL. Contact support if problem persists.');
+                        setIsUploadingImage(false);
+                      } else {
+                        console.log('🔄 Updating profile with real URL...');
+                        // Replace blob URL with actual Supabase Storage URL
+                        setProfile(prev => {
+                          console.log('Old photo:', prev.photo.substring(0, 50));
+                          console.log('New photo:', result.url);
+                          return { ...prev, photo: result.url, newPhotoFile: undefined };
+                        });
+                        setIsUploadingImage(false);
+                        console.log('✨ Profile updated with real URL');
+                      }
+                    } else if (result?.error) {
+                      console.error('❌ Upload error:', result.error);
+                      setEditError("Failed to upload: " + result.error);
+                      setIsUploadingImage(false);
+                    } else {
+                      console.error('❌ Unexpected response:', result);
+                      setEditError("Unexpected response from server");
+                      setIsUploadingImage(false);
                     }
                   } catch (err) {
-                    setEditError("Error uploading image");
+                    console.error('💥 Upload exception:', err);
+                    setEditError("Error uploading image: " + err.message);
+                    setIsUploadingImage(false);
                   }
                 }
               }} />
               {profile.newPhotoFile && (
-                <img src={profile.photo} alt="Preview" className="w-20 h-20 rounded-full object-cover mb-4" />
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                  <img 
+                    src={profile.photo} 
+                    alt="Preview" 
+                    className="w-20 h-20 rounded-full object-cover mb-2 border-2 border-blue-300"
+                    onError={(e) => console.error('Preview image failed to load:', profile.photo)}
+                  />
+                  {isUploadingImage ? (
+                    <p className="text-xs text-blue-600">⏳ <strong>Uploading...</strong> Do not close this dialog</p>
+                  ) : profile.photo.startsWith('blob:') ? (
+                    <p className="text-xs text-orange-600">⚠️ Upload may not have completed. Try uploading again.</p>
+                  ) : (
+                    <p className="text-xs text-green-600">✅ <strong>Image uploaded successfully!</strong> You can now save.</p>
+                  )}
+                </div>
               )}
               <label className="block mb-2">Interests</label>
               <Input value={profile.interests} onChange={e => setProfile({ ...profile, interests: e.target.value })} className="mb-4" />
               <div className="flex gap-2 mt-4">
-                <Button type="submit" variant="hero">Save</Button>
+                <Button 
+                  type="submit" 
+                  variant="hero"
+                  disabled={isUploadingImage}
+                >
+                  {isUploadingImage ? '⏳ Uploading...' : 'Save'}
+                </Button>
                 <Button type="button" variant="soft" onClick={() => setEditOpen(false)}>Cancel</Button>
               </div>
-              {editError && <div className="text-red-500 mt-2">{editError}</div>}
+              {editError && <div className="text-red-500 mt-2 text-sm">{editError}</div>}
               {editSuccess && <div className="text-green-600 mt-2">Profile updated!</div>}
             </form>
           </div>

@@ -70,6 +70,13 @@ CREATE TABLE user_sessions (
     expires_at TIMESTAMP
 );
 
+CREATE TABLE user_locations (
+    user_id UUID PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ============================================
 -- FRIENDSHIPS
 -- ============================================

@@ -28,6 +28,8 @@ router.post('/logoutAll', requireAuth, UserController.logoutAll);
 // Friends & Search endpoints
 router.get('/search', requireAuth, UserController.searchUsers);
 router.get('/friends', requireAuth, UserController.getAcceptedFriends);
+router.get('/friends/locations', requireAuth, UserController.getFriendsLocations);
+router.post('/location', requireAuth, UserController.updateMyLocation);
 router.get('/friend-requests/incoming', requireAuth, UserController.getIncomingFriendRequests);
 router.get('/:userId/profile', requireAuth, UserController.getUserProfile);
 router.get('/:userId/friend-status', requireAuth, UserController.getFriendRequestStatus);

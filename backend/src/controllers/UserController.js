@@ -559,6 +559,122 @@ const UserController = {
       res.status(500).json({ error: err.message });
     }
   },
+  async updateMyLocation(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { latitude, longitude } = req.body;
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return res.status(400).json({ error: 'latitude and longitude are required numbers' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const authenticatedSupabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_KEY,
+        { global: { headers: { Authorization: `Bearer ${token}` } } }
+      );
+
+      const { error } = await authenticatedSupabase
+        .from('user_locations')
+        .upsert(
+          {
+            user_id: userId,
+            latitude,
+            longitude,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
+
+      if (error) {
+        if (error.code === '42P01') {
+          return res.status(500).json({
+            error: 'user_locations table is missing. Apply schema changes first.',
+          });
+        }
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+  async getFriendsLocations(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const authenticatedSupabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_KEY,
+        { global: { headers: { Authorization: `Bearer ${token}` } } }
+      );
+
+      const { data: friendships, error: friendError } = await authenticatedSupabase
+        .from('friendships')
+        .select('requester_id, addressee_id')
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+
+      if (friendError) return res.status(400).json({ error: friendError.message });
+      if (!friendships || friendships.length === 0) return res.json({ data: [] });
+
+      const friendIds = friendships.map((friendship) =>
+        friendship.requester_id === userId ? friendship.addressee_id : friendship.requester_id
+      );
+
+      const { data: profiles, error: profileError } = await authenticatedSupabase
+        .from('user_profiles')
+        .select('user_id, full_name, username, profile_photo_url, bio')
+        .in('user_id', friendIds);
+
+      if (profileError) return res.status(400).json({ error: profileError.message });
+
+      const { data: locations, error: locationError } = await authenticatedSupabase
+        .from('user_locations')
+        .select('user_id, latitude, longitude, updated_at')
+        .in('user_id', friendIds);
+
+      if (locationError) {
+        if (locationError.code === '42P01') {
+          return res.status(500).json({
+            error: 'user_locations table is missing. Apply schema changes first.',
+          });
+        }
+        return res.status(400).json({ error: locationError.message });
+      }
+
+      const locationByUserId = new Map((locations || []).map((location) => [location.user_id, location]));
+
+      const data = (profiles || []).map((profile) => {
+        const location = locationByUserId.get(profile.user_id);
+        return {
+          ...profile,
+          latitude: location?.latitude ?? null,
+          longitude: location?.longitude ?? null,
+          location_updated_at: location?.updated_at ?? null,
+        };
+      });
+
+      return res.json({ data });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
   async getIncomingFriendRequests(req, res) {
     const supabase = getSupabase(req);
     const token = req.supabaseToken;

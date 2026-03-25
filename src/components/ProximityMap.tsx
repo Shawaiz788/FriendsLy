@@ -86,7 +86,7 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
       outerCircleRef.current = null;
       friendLayerRef.current = null;
     };
-  }, [currentUserPos]);
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current) return;

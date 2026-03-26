@@ -1,8 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ChevronRight, Ghost, Bell, Shield, LogOut, Trash2, User, MapPin } from "lucide-react";
+import { Bell, Download, LogOut, Shield, ShieldAlert, Trash2, User, UserX } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { editProfile } from "@/lib/api";
@@ -28,8 +31,6 @@ async function fetchProfile(token) {
 
 const ProfilePage = () => {
   const navigate = useNavigate();
-  const [ghostMode, setGhostMode] = useState(false);
-  const [quietHours, setQuietHours] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -54,6 +55,8 @@ const ProfilePage = () => {
   const [userId, setUserId] = useState("");
   const [editError, setEditError] = useState("");
   const [editSuccess, setEditSuccess] = useState(false);
+  const [quietHours, setQuietHours] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("supabaseToken");
@@ -131,68 +134,6 @@ const ProfilePage = () => {
     }
   }, [editSuccess, token]);
 
-  const settingsGroups = [
-    {
-      title: "Privacy",
-      items: [
-        {
-          icon: Ghost,
-          label: "Ghost Mode",
-          desc: "Become invisible to all friends",
-          toggle: true,
-          checked: ghostMode,
-          onToggle: setGhostMode,
-        },
-        {
-          icon: Shield,
-          label: "Selective Ghosting",
-          desc: "Hide from specific friends",
-          chevron: true,
-        },
-        {
-          icon: MapPin,
-          label: "Location Settings",
-          desc: "Manage presence visibility",
-          chevron: true,
-        },
-      ],
-    },
-    {
-      title: "Notifications",
-      items: [
-        {
-          icon: Bell,
-          label: "Quiet Hours",
-          desc: "Mute all notifications",
-          toggle: true,
-          checked: quietHours,
-          onToggle: setQuietHours,
-        },
-      ],
-    },
-    {
-      title: "Account",
-      items: [
-        {
-          icon: LogOut,
-          label: "Log Out",
-          desc: "Sign out of your account",
-          action: () => {
-            localStorage.removeItem("supabaseToken");
-            localStorage.removeItem("cachedProfile");
-            navigate("/");
-          },
-        },
-        {
-          icon: Trash2,
-          label: "Delete Account",
-          desc: "Permanently remove your data",
-          danger: true,
-        },
-      ],
-    },
-  ];
-
   async function handleEditProfile(e) {
     e.preventDefault();
     setEditError("");
@@ -229,10 +170,16 @@ const ProfilePage = () => {
     }
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem("supabaseToken");
+    localStorage.removeItem("cachedProfile");
+    navigate("/");
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <div className="px-6 pt-6">
-        <h1 className="font-serif text-2xl font-bold text-foreground mb-6">Profile</h1>
+        <h1 className="font-serif text-2xl font-bold text-foreground mb-6">Settings</h1>
 
         {/* Profile card */}
         <div className="glass-card rounded-2xl p-5 flex items-center gap-4 mb-8 animate-float-in">
@@ -369,43 +316,101 @@ const ProfilePage = () => {
           </div>
         )}
 
-        {/* Settings */}
-        {settingsGroups.map((group) => (
-          <div key={group.title} className="mb-6">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3">
-              {group.title}
-            </p>
-            <div className="glass-card rounded-2xl overflow-hidden divide-y divide-border/50">
-              {group.items.map((item) => (
-                <button
-                  key={item.label}
-                  onClick={item.action}
-                  className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors"
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                    item.danger ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
-                  }`}>
-                    <item.icon className="w-4.5 h-4.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${item.danger ? "text-destructive" : "text-foreground"}`}>
-                      {item.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{item.desc}</p>
-                  </div>
-                  {item.toggle && (
-                    <Switch
-                      checked={item.checked}
-                      onCheckedChange={item.onToggle}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  )}
-                  {item.chevron && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                </button>
-              ))}
+        <Card className="glass-card rounded-2xl border-border/50 mb-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Privacy & Safety</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="glass-card rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <p className="text-sm font-medium">Granular visibility controls</p>
+                </div>
+                <Badge>FR44</Badge>
+              </div>
+              <Select defaultValue="friends">
+                <SelectTrigger>
+                  <SelectValue placeholder="Who can view your activity" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="friends">Friends</SelectItem>
+                  <SelectItem value="close-friends">Close Friends</SelectItem>
+                  <SelectItem value="public">Public</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Trusted emergency contacts</span>
+                <Button variant="outline" size="sm">Manage</Button>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Block and report</span>
+                <Button variant="outline" size="sm">
+                  <ShieldAlert className="w-4 h-4" /> Open
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-2xl border-border/50 mb-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Notifications & Appearance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="glass-card rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-primary" />
+                  <p className="text-sm font-medium">Notification management</p>
+                </div>
+                <Button variant="outline" size="sm">Customize</Button>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Quiet hours</span>
+                <Switch checked={quietHours} onCheckedChange={setQuietHours} />
+              </div>
+            </div>
+
+            <div className="glass-card rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium">Accessibility + UX</p>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Dark mode</span>
+                <Switch checked={darkMode} onCheckedChange={setDarkMode} />
+              </div>
+              <Select defaultValue="sage-coral">
+                <SelectTrigger>
+                  <SelectValue placeholder="Theme preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sage-coral">Sage + Coral</SelectItem>
+                  <SelectItem value="muted-night">Muted Night</SelectItem>
+                  <SelectItem value="warm-paper">Warm Paper</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-2xl border-border/50 mb-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Account</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button variant="outline" className="w-full justify-start">
+              <UserX className="w-4 h-4" /> Deactivate account
+            </Button>
+            <Button variant="outline" className="w-full justify-start">
+              <Download className="w-4 h-4" /> Download my data
+            </Button>
+            <Button variant="outline" className="w-full justify-start" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" /> Log out
+            </Button>
+            <Button variant="destructive" className="w-full justify-start">
+              <Trash2 className="w-4 h-4" /> Delete account
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <BottomNav />

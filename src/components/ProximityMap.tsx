@@ -181,7 +181,7 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
   return (
     <div
       ref={containerRef}
-      className="w-full rounded-2xl overflow-hidden shadow-lg border border-border/50"
+      className="proximity-map relative z-0 w-full rounded-2xl overflow-hidden shadow-lg border border-border/50"
       style={{ height: 360 }}
     />
   );

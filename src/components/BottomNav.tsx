@@ -1,14 +1,15 @@
-import { Home, Users, Target, Bell, User, Search } from "lucide-react";
+import { Home, Users, Target, Bell, Search, Clapperboard, Settings } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/home" },
+  { icon: Clapperboard, label: "Social", path: "/social" },
   { icon: Search, label: "Search", path: "/search" },
   { icon: Users, label: "Friends", path: "/friends" },
   { icon: Target, label: "Intent", path: "/intent" },
   { icon: Bell, label: "Alerts", path: "/notifications" },
-  { icon: User, label: "Profile", path: "/profile" },
+  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 const BottomNav = () => {
@@ -16,10 +17,13 @@ const BottomNav = () => {
   const navigate = useNavigate();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 glass-card border-t border-border/50 pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-[900] glass-card border-t border-border/50 pb-safe">
       <div className="flex items-center justify-around px-2 py-2">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isSettingsItem = item.path === "/settings";
+          const isActive = isSettingsItem
+            ? location.pathname === "/settings" || location.pathname === "/profile"
+            : location.pathname === item.path;
           return (
             <button
               key={item.path}

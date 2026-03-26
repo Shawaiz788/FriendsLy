@@ -173,3 +173,39 @@
 .animate-fade-in {
   animation: fade-in 0.4s ease-out forwards;
 }
+
+.proximity-map .leaflet-container {
+  z-index: 0;
+}
+
+.proximity-map .leaflet-pane {
+  z-index: 10;
+}
+
+.proximity-map .leaflet-tile-pane {
+  z-index: 10;
+}
+
+.proximity-map .leaflet-overlay-pane {
+  z-index: 20;
+}
+
+.proximity-map .leaflet-shadow-pane {
+  z-index: 30;
+}
+
+.proximity-map .leaflet-marker-pane {
+  z-index: 40;
+}
+
+.proximity-map .leaflet-tooltip-pane {
+  z-index: 50;
+}
+
+.proximity-map .leaflet-popup-pane {
+  z-index: 60;
+}
+
+.proximity-map .leaflet-control-container {
+  z-index: 70;
+}

@@ -1,7 +1,10 @@
 import express from 'express';
+import multer from 'multer';
 import UserController from '../controllers/UserController.js';
+import HangoutController from '../controllers/HangoutController.js';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // Middleware to check Supabase JWT
 function requireAuth(req, res, next) {
@@ -31,6 +34,15 @@ router.get('/friends', requireAuth, UserController.getAcceptedFriends);
 router.get('/friends/locations', requireAuth, UserController.getFriendsLocations);
 router.post('/location', requireAuth, UserController.updateMyLocation);
 router.get('/friend-requests/incoming', requireAuth, UserController.getIncomingFriendRequests);
+router.post('/hangouts/suggested/accept', requireAuth, HangoutController.acceptSuggestedHangout);
+router.get('/hangouts/invites', requireAuth, HangoutController.getMyHangoutInvites);
+router.post('/hangouts/:hangoutId/respond', requireAuth, HangoutController.respondToHangoutInvite);
+router.get('/hangouts/mine', requireAuth, HangoutController.getMyHangouts);
+router.get('/groups/:groupId/messages', requireAuth, HangoutController.getGroupMessages);
+router.post('/groups/:groupId/messages', requireAuth, HangoutController.sendGroupMessage);
+router.post('/groups/:groupId/media', requireAuth, upload.single('file'), HangoutController.uploadGroupMedia);
+router.get('/capsules/:capsuleId', requireAuth, HangoutController.getCapsuleDetails);
+router.post('/capsules/:capsuleId/reflections', requireAuth, HangoutController.addCapsuleReflection);
 router.get('/:userId/profile', requireAuth, UserController.getUserProfile);
 router.get('/:userId/friend-status', requireAuth, UserController.getFriendRequestStatus);
 router.post('/friend-request/send', requireAuth, UserController.sendFriendRequest);

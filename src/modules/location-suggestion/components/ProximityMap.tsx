@@ -11,6 +11,7 @@ interface Friend {
 }
 
 export interface PositionedFriend {
+  userId?: string;
   name: string;
   intent: string;
   presence: "nearby" | "city" | "away";

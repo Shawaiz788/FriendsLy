@@ -41,6 +41,7 @@ This project is reorganized to reflect the architecture modules from the SRS and
     - `src/modules/friends-interaction/pages/SearchPage.tsx`
     - `src/modules/friends-interaction/components/FriendCard.tsx`
     - `src/modules/friends-interaction/services/friendsApi.ts`
+    - `src/modules/friends-interaction/services/hangoutApi.ts` (submodule for hangout accept/invite actions)
 
 - `content-creation`
   - Responsibility: social/content creation and interaction page.
@@ -70,6 +71,7 @@ This project is reorganized to reflect the architecture modules from the SRS and
   - Responsibility: account management, profile, friendships, location APIs.
   - Paths:
     - `backend/src/modules/user-management/controllers/UserController.js`
+    - `backend/src/modules/user-management/controllers/HangoutController.js` (submodule for hangout/group/capsule lifecycle)
     - `backend/src/modules/user-management/routes/user.js`
 
 ## Compatibility Layer

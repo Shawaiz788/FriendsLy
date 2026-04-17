@@ -21,7 +21,7 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 app.set('supabase', supabase);
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Shortcut routes for registration and login
 app.post('/register', async (req, res) => {

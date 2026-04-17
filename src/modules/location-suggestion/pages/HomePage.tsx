@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import ProximityMap, { getPositionedFriends, type PositionedFriend } from "@/components/ProximityMap";
 import IntentBadge from "@/components/IntentBadge";
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Ghost } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { getFriendsLocations, updateMyLocation } from "@/lib/api";
+import { acceptSuggestedHangout, getFriendsLocations, updateMyLocation } from "@/lib/api";
 
 const intents = [
   { label: "Free", emoji: "✌️" },
@@ -82,13 +83,16 @@ const HomePage = () => {
     Array<{
       user_id: string;
       full_name: string;
+      username: string;
       bio: string | null;
       profile_photo_url: string | null;
       latitude: number | null;
       longitude: number | null;
     }>
   >([]);
-  const lastNotificationKeyRef = useRef("");
+  const [startingSuggestionFor, setStartingSuggestionFor] = useState<string | null>(null);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   const requestCurrentLocation = () =>
     new Promise<{ lat: number; lng: number }>((resolve, reject) => {
@@ -233,6 +237,7 @@ const HomePage = () => {
           distanceKm <= INNER_RADIUS_KM ? "nearby" : distanceKm <= OUTER_RADIUS_KM ? "city" : "away";
 
         return {
+          userId: friend.user_id,
           name: friend.full_name,
           intent: friend.bio ? friend.bio : "Available",
           presence,
@@ -246,46 +251,14 @@ const HomePage = () => {
     return getPositionedFriends(userPos);
   }, [friendsLocations, userLocation]);
 
-  useEffect(() => {
-    if (!userLocation) {
-      lastNotificationKeyRef.current = "";
-      return;
-    }
-
-    const userPos: [number, number] = [userLocation.lat, userLocation.lng];
-    const friendsInBand = mapFriends.filter((friend) => {
-      const dist = distanceMeters(userPos, [friend.lat, friend.lng]);
-      return dist >= INNER_RADIUS_KM * 1000 && dist <= OUTER_RADIUS_KM * 1000;
-    });
-
-    if (!friendsInBand.length) {
-      lastNotificationKeyRef.current = "";
-      return;
-    }
-
-    const notificationKey = friendsInBand
-      .map((friend) => friend.name)
-      .sort((a, b) => a.localeCompare(b))
-      .join("|");
-
-    if (notificationKey === lastNotificationKeyRef.current) return;
-
-    lastNotificationKeyRef.current = notificationKey;
-
-    if (friendsInBand.length === 1) {
-      toast({
-        title: "Hangout suggestion",
-        description: `${friendsInBand[0].name} is in your ${INNER_RADIUS_KM}–${OUTER_RADIUS_KM}km radius. Invite them?`,
-      });
-      return;
-    }
-
-    const friendNames = friendsInBand.map((friend) => friend.name).join(", ");
-    toast({
-      title: "Group hangout suggestion",
-      description: `${friendNames} are in your ${INNER_RADIUS_KM}–${OUTER_RADIUS_KM}km radius. Start a group hangout?`,
-    });
-  }, [mapFriends, userLocation]);
+  const suggestedHangouts = useMemo(
+    () =>
+      mapFriends
+        .filter((friend) => (friend.presence === "nearby" || friend.presence === "city") && !!friend.userId)
+        .filter((friend) => !dismissedSuggestions.includes(friend.userId!))
+        .slice(0, 3),
+    [dismissedSuggestions, mapFriends],
+  );
 
   const handleManualLocationUpdate = async () => {
     if (!token) {
@@ -325,6 +298,66 @@ const HomePage = () => {
     } finally {
       setIsUpdatingLocation(false);
     }
+  };
+
+  const handleStartHangout = async (suggestedUserId: string) => {
+    if (!token) {
+      toast({
+        title: "Not logged in",
+        description: "Please login before starting a hangout.",
+      });
+      return;
+    }
+
+    const target = mapFriends.find((friend) => friend.userId === suggestedUserId);
+    if (!target) {
+      toast({
+        title: "Suggestion expired",
+        description: "Refresh your nearby suggestions and try again.",
+      });
+      return;
+    }
+
+    setStartingSuggestionFor(suggestedUserId);
+    try {
+      const result = await acceptSuggestedHangout(
+        {
+          suggestedUserId,
+          intentName: target.intent,
+          title: `${target.intent} hangout with ${target.name}`,
+          description: "Created from radius overlap suggestion.",
+        },
+        token,
+      );
+
+      if (!result?.success) {
+        toast({
+          title: "Could not start hangout",
+          description: result?.error || "Please try again.",
+        });
+        return;
+      }
+
+      toast({
+        title: "Hangout started",
+        description: "Opening your temporary chat and capsule workspace.",
+      });
+      setDismissedSuggestions((prev) => [...prev, suggestedUserId]);
+      if (result?.hangout_id) {
+        navigate(`/social?tab=chat&hangout=${result.hangout_id}`);
+      }
+    } catch (error) {
+      toast({
+        title: "Could not start hangout",
+        description: "Please try again shortly.",
+      });
+    } finally {
+      setStartingSuggestionFor(null);
+    }
+  };
+
+  const handleSuggestionLater = (suggestedUserId: string) => {
+    setDismissedSuggestions((prev) => [...prev, suggestedUserId]);
   };
 
   return (
@@ -388,16 +421,24 @@ const HomePage = () => {
       {/* Suggestions */}
       <div className="px-6 space-y-3">
         <h2 className="font-serif text-lg font-semibold text-foreground">Suggested Hangouts</h2>
-        <SuggestionCard
-          friendName="Sara"
-          intent="Free"
-          reason="You and Sara are within your 2–5km radius and both marked as 'Free'."
-        />
-        <SuggestionCard
-          friendName="Ali"
-          intent="Studying"
-          reason="You and Ali are nearby. Ali is also 'Studying' – start a study session?"
-        />
+        {suggestedHangouts.length ? (
+          suggestedHangouts.map((suggestion) => (
+            <SuggestionCard
+              key={`${suggestion.userId}-${suggestion.name}`}
+              userId={suggestion.userId!}
+              friendName={suggestion.name}
+              intent={suggestion.intent}
+              reason={`You and ${suggestion.name} are within your ${INNER_RADIUS_KM}–${OUTER_RADIUS_KM}km radius and both look available.`}
+              onStartHangout={handleStartHangout}
+              onLater={handleSuggestionLater}
+              isStarting={startingSuggestionFor === suggestion.userId}
+            />
+          ))
+        ) : (
+          <div className="glass-card rounded-2xl p-4 text-sm text-muted-foreground">
+            No active overlap suggestions right now. Keep location on to detect nearby hangouts.
+          </div>
+        )}
       </div>
 
       <BottomNav />

@@ -3,6 +3,7 @@
 
 export * from "@/modules/user-account/services/userAccountApi";
 export * from "@/modules/friends-interaction/services/friendsApi";
+export * from "@/modules/friends-interaction/services/hangoutApi";
 export * from "@/modules/location-suggestion/services/locationApi";
 // Check if username is available
 export async function checkUsernameAvailability(username: string) {

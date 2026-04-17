@@ -2,12 +2,24 @@ import { Button } from "@/components/ui/button";
 import { Info, MessageCircle } from "lucide-react";
 
 interface SuggestionCardProps {
+  userId: string;
   friendName: string;
   intent: string;
   reason: string;
+  onStartHangout: (userId: string) => void;
+  onLater?: (userId: string) => void;
+  isStarting?: boolean;
 }
 
-const SuggestionCard = ({ friendName, intent, reason }: SuggestionCardProps) => (
+const SuggestionCard = ({
+  userId,
+  friendName,
+  intent,
+  reason,
+  onStartHangout,
+  onLater,
+  isStarting = false,
+}: SuggestionCardProps) => (
   <div className="glass-card rounded-2xl p-5 space-y-3 animate-float-in">
     <div className="flex items-start justify-between">
       <div>
@@ -27,10 +39,10 @@ const SuggestionCard = ({ friendName, intent, reason }: SuggestionCardProps) => 
       <span>{reason}</span>
     </div>
     <div className="flex gap-2">
-      <Button variant="hero" size="sm" className="flex-1">
-        Start Hangout
+      <Button variant="hero" size="sm" className="flex-1" onClick={() => onStartHangout(userId)} disabled={isStarting}>
+        {isStarting ? "Starting..." : "Start Hangout"}
       </Button>
-      <Button variant="soft" size="sm">
+      <Button variant="soft" size="sm" onClick={() => onLater?.(userId)}>
         Later
       </Button>
     </div>

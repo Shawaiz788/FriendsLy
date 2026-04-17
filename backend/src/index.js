@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import multer from 'multer';
-import userRoutes from './routes/user.js';
+import userRoutes from './modules/user-management/routes/user.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -112,9 +112,9 @@ app.post('/login', async (req, res) => {
 
 // File upload route with multer middleware
 app.post('/api/user/upload-image', upload.single('file'), async (req, res) => {
-	const userRoutes = (await import('./routes/user.js')).default;
+	const userRoutes = (await import('./modules/user-management/routes/user.js')).default;
 	// This is a hack - call the controller directly
-	const UserController = (await import('./controllers/UserController.js')).default;
+	const UserController = (await import('./modules/user-management/controllers/UserController.js')).default;
 	
 	const token = req.headers['authorization']?.replace('Bearer ', '');
 	req.supabaseToken = token;

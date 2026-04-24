@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import IntentBadge from "@/components/IntentBadge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import {
+  loadIntentPreferences,
+  saveIntentPreferences,
+  type IntentPreferences,
+} from "@/modules/intent-aura/services/intentPreferences";
+import {
+  getMyIntentPreferences,
+  upsertMyIntentPreferences,
+} from "@/modules/intent-aura/services/intentPreferencesApi";
 
 const allIntents = [
   { label: "Free", emoji: "✌️" },
@@ -15,21 +24,79 @@ const allIntents = [
 ];
 
 const IntentPage = () => {
-  const [activeIntent, setActiveIntent] = useState("Free");
-  const [enabledIntents, setEnabledIntents] = useState(
-    allIntents.map((i) => i.label)
-  );
-  const [innerRadius, setInnerRadius] = useState([1]);
-  const [outerRadius, setOuterRadius] = useState([5]);
-  const [autoExpire, setAutoExpire] = useState(true);
+  const initialPreferences = useMemo(() => loadIntentPreferences(), []);
+  const [activeIntent, setActiveIntent] = useState(initialPreferences.activeIntent);
+  const [enabledIntents, setEnabledIntents] = useState(initialPreferences.enabledIntents);
+  const [innerRadius, setInnerRadius] = useState([initialPreferences.innerRadiusKm]);
+  const [outerRadius, setOuterRadius] = useState([initialPreferences.outerRadiusKm]);
+  const [autoExpire, setAutoExpire] = useState(initialPreferences.autoExpire);
+  const [token, setToken] = useState("");
+  const hasHydratedFromBackend = useRef(false);
+  const hasLocalChanges = useRef(false);
 
   const toggleEnabled = (label: string) => {
+    hasLocalChanges.current = true;
     setEnabledIntents((prev) =>
       prev.includes(label)
         ? prev.filter((l) => l !== label)
         : [...prev, label]
     );
   };
+
+  useEffect(() => {
+    if (!enabledIntents.includes(activeIntent) && enabledIntents.length > 0) {
+      setActiveIntent(enabledIntents[0]);
+    }
+  }, [activeIntent, enabledIntents]);
+
+  useEffect(() => {
+    setToken(localStorage.getItem("supabaseToken") || "");
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      hasHydratedFromBackend.current = true;
+      return;
+    }
+
+    const loadFromBackend = async () => {
+      const result = await getMyIntentPreferences(token);
+      if (result?.data && !hasLocalChanges.current) {
+        setActiveIntent(result.data.active_intent || initialPreferences.activeIntent);
+        setEnabledIntents(result.data.enabled_intents || initialPreferences.enabledIntents);
+        setInnerRadius([result.data.inner_radius_km ?? initialPreferences.innerRadiusKm]);
+        setOuterRadius([result.data.outer_radius_km ?? initialPreferences.outerRadiusKm]);
+        setAutoExpire(
+          typeof result.data.auto_expire === "boolean"
+            ? result.data.auto_expire
+            : initialPreferences.autoExpire,
+        );
+      }
+      hasHydratedFromBackend.current = true;
+    };
+
+    void loadFromBackend();
+  }, [initialPreferences.activeIntent, initialPreferences.autoExpire, initialPreferences.enabledIntents, initialPreferences.innerRadiusKm, initialPreferences.outerRadiusKm, token]);
+
+  useEffect(() => {
+    const nextPreferences: IntentPreferences = {
+      activeIntent,
+      enabledIntents,
+      innerRadiusKm: innerRadius[0],
+      outerRadiusKm: outerRadius[0],
+      autoExpire,
+    };
+    saveIntentPreferences(nextPreferences);
+    if (!token || !hasHydratedFromBackend.current) return;
+
+    const timer = window.setTimeout(() => {
+      void upsertMyIntentPreferences(nextPreferences, token);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeIntent, autoExpire, enabledIntents, innerRadius, outerRadius, token]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -51,7 +118,10 @@ const IntentPage = () => {
                   label={intent.label}
                   emoji={intent.emoji}
                   active={activeIntent === intent.label}
-                  onClick={() => setActiveIntent(intent.label)}
+                  onClick={() => {
+                    hasLocalChanges.current = true;
+                    setActiveIntent(intent.label);
+                  }}
                 />
               ))}
           </div>
@@ -92,7 +162,10 @@ const IntentPage = () => {
               </div>
               <Slider
                 value={innerRadius}
-                onValueChange={setInnerRadius}
+                onValueChange={(value) => {
+                  hasLocalChanges.current = true;
+                  setInnerRadius(value);
+                }}
                 min={0}
                 max={10}
                 step={0.5}
@@ -108,7 +181,10 @@ const IntentPage = () => {
               </div>
               <Slider
                 value={outerRadius}
-                onValueChange={setOuterRadius}
+                onValueChange={(value) => {
+                  hasLocalChanges.current = true;
+                  setOuterRadius(value);
+                }}
                 min={1}
                 max={20}
                 step={0.5}
@@ -126,7 +202,13 @@ const IntentPage = () => {
               <p className="text-sm font-medium text-foreground">Auto-expire intent</p>
               <p className="text-xs text-muted-foreground">Intent resets after 1 hour</p>
             </div>
-            <Switch checked={autoExpire} onCheckedChange={setAutoExpire} />
+            <Switch
+              checked={autoExpire}
+              onCheckedChange={(value) => {
+                hasLocalChanges.current = true;
+                setAutoExpire(value);
+              }}
+            />
           </div>
         </div>
       </div>

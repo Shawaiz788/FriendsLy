@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, Download, LogOut, Shield, ShieldAlert, Trash2, User, UserX } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
-import { editProfile } from "@/lib/api";
+import { editProfile, updateMyLocation } from "@/lib/api";
 
 async function fetchProfile(token) {
   // Get user id from token
@@ -57,6 +57,125 @@ const ProfilePage = () => {
   const [editSuccess, setEditSuccess] = useState(false);
   const [quietHours, setQuietHours] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState("sage-coral");
+  const [manualLatitude, setManualLatitude] = useState("");
+  const [manualLongitude, setManualLongitude] = useState("");
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
+  const [locationStatus, setLocationStatus] = useState("");
+  const [showApplyLocationAction, setShowApplyLocationAction] = useState(false);
+
+  const applyAppearance = (isDark: boolean, theme: string) => {
+    const root = document.documentElement;
+    root.classList.toggle("dark", isDark);
+    root.setAttribute("data-theme", theme);
+  };
+
+  const persistAppearance = async (nextDark: boolean, nextTheme: string) => {
+    if (!token) return;
+    await editProfile({
+      name: profile.name,
+      username: profile.username,
+      photo: profile.photo,
+      interests: profile.interests,
+      date_of_birth: profile.date_of_birth,
+      gender: profile.gender,
+      dark_mode_enabled: nextDark,
+      selected_theme: nextTheme,
+      token,
+    });
+  };
+
+  const handleUseCurrentLocation = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H1',location:'ProfilePage.tsx:handleUseCurrentLocation:start',message:'Use current location triggered',data:{hasGeolocation:!!navigator.geolocation},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!navigator.geolocation) {
+      setLocationStatus("Geolocation is not supported on this device.");
+      return;
+    }
+
+    setLocationStatus("Detecting your current location...");
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H1',location:'ProfilePage.tsx:handleUseCurrentLocation:success',message:'Browser geolocation returned coordinates',data:{lat:coords.latitude,lng:coords.longitude},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        setManualLatitude(String(coords.latitude));
+        setManualLongitude(String(coords.longitude));
+        setLocationStatus("Current location loaded. Click Save location.");
+        setShowApplyLocationAction(true);
+      },
+      () => {
+        setLocationStatus("Could not fetch current location.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0,
+      },
+    );
+  };
+
+  const handleSaveManualLocation = async () => {
+    if (!token) {
+      setLocationStatus("Please log in first.");
+      return;
+    }
+
+    const latitude = Number(manualLatitude);
+    const longitude = Number(manualLongitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setLocationStatus("Please enter valid numeric latitude and longitude.");
+      return;
+    }
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      setLocationStatus("Latitude must be -90 to 90, longitude must be -180 to 180.");
+      return;
+    }
+
+    setIsSavingLocation(true);
+    setLocationStatus("Saving location...");
+    try {
+      // #region agent log
+      fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H2',location:'ProfilePage.tsx:handleSaveManualLocation:beforeApi',message:'Attempting manual location save',data:{lat:latitude,lng:longitude,hasToken:!!token},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      const result = await updateMyLocation({ latitude, longitude }, token);
+      // #region agent log
+      fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H2',location:'ProfilePage.tsx:handleSaveManualLocation:afterApi',message:'Manual location save response',data:{success:!!result?.success,error:result?.error||null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (result?.success) {
+        setLocationStatus("Location updated successfully.");
+        setShowApplyLocationAction(true);
+      } else {
+        setLocationStatus(result?.error || "Could not save location.");
+      }
+    } catch {
+      setLocationStatus("Could not save location right now.");
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
+  const handleApplyLocation = () => {
+    const latitude = Number(manualLatitude);
+    const longitude = Number(manualLongitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setLocationStatus("Please enter valid numeric latitude and longitude.");
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("friendsly-location-updated", {
+        detail: { lat: latitude, lng: longitude },
+      }),
+    );
+    // #region agent log
+    fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H3',location:'ProfilePage.tsx:handleApplyLocation:dispatch',message:'Manual location apply event dispatched',data:{lat:latitude,lng:longitude},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    setLocationStatus("Location applied to the app.");
+    setShowApplyLocationAction(false);
+  };
 
   useEffect(() => {
     const t = localStorage.getItem("supabaseToken");
@@ -73,6 +192,14 @@ const ProfilePage = () => {
             photo: typeof cached?.photo === 'string' && cached.photo.startsWith('blob:') ? '' : cached.photo,
           };
           setProfile(prev => ({ ...prev, ...sanitizedCached }));
+          const cachedDarkMode = Boolean(cached?.dark_mode_enabled);
+          const cachedTheme =
+            typeof cached?.selected_theme === "string" && cached.selected_theme
+              ? cached.selected_theme
+              : "sage-coral";
+          setDarkMode(cachedDarkMode);
+          setSelectedTheme(cachedTheme);
+          applyAppearance(cachedDarkMode, cachedTheme);
         } catch (e) {
           console.error("Failed to parse cached profile:", e);
         }
@@ -97,9 +224,14 @@ const ProfilePage = () => {
             interests: data.data[0].bio || "",
             date_of_birth: data.data[0].date_of_birth || "",
             gender: data.data[0].gender || "",
+            dark_mode_enabled: Boolean(data.data[0].dark_mode_enabled),
+            selected_theme: data.data[0].selected_theme || "sage-coral",
             newPhotoFile: undefined
           };
           setProfile(profileData);
+          setDarkMode(Boolean(data.data[0].dark_mode_enabled));
+          setSelectedTheme(data.data[0].selected_theme || "sage-coral");
+          applyAppearance(Boolean(data.data[0].dark_mode_enabled), data.data[0].selected_theme || "sage-coral");
           // Cache the profile for instant loading next time
           localStorage.setItem("cachedProfile", JSON.stringify(profileData));
           // Reset image error state when profile updates
@@ -122,9 +254,14 @@ const ProfilePage = () => {
             interests: data.data[0].bio || "",
             date_of_birth: data.data[0].date_of_birth || "",
             gender: data.data[0].gender || "",
+            dark_mode_enabled: Boolean(data.data[0].dark_mode_enabled),
+            selected_theme: data.data[0].selected_theme || "sage-coral",
             newPhotoFile: undefined
           };
           setProfile(profileData);
+          setDarkMode(Boolean(data.data[0].dark_mode_enabled));
+          setSelectedTheme(data.data[0].selected_theme || "sage-coral");
+          applyAppearance(Boolean(data.data[0].dark_mode_enabled), data.data[0].selected_theme || "sage-coral");
           // Update cache
           localStorage.setItem("cachedProfile", JSON.stringify(profileData));
           // Reset image error state
@@ -161,6 +298,8 @@ const ProfilePage = () => {
       interests: profile.interests,
       date_of_birth: profile.date_of_birth,
       gender: profile.gender,
+      dark_mode_enabled: darkMode,
+      selected_theme: selectedTheme,
       token
     });
     if (result.error) setEditError(result.error);
@@ -376,18 +515,74 @@ const ProfilePage = () => {
               <p className="text-sm font-medium">Accessibility + UX</p>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Dark mode</span>
-                <Switch checked={darkMode} onCheckedChange={setDarkMode} />
+                <Switch
+                  checked={darkMode}
+                  onCheckedChange={(value) => {
+                    setDarkMode(value);
+                    applyAppearance(value, selectedTheme);
+                    void persistAppearance(value, selectedTheme);
+                  }}
+                />
               </div>
-              <Select defaultValue="sage-coral">
+              <Select
+                value={selectedTheme}
+                onValueChange={(value) => {
+                  setSelectedTheme(value);
+                  applyAppearance(darkMode, value);
+                  void persistAppearance(darkMode, value);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Theme preset" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sage-coral">Sage + Coral</SelectItem>
+                  <SelectItem value="sage-coral">Sage Green</SelectItem>
+                  <SelectItem value="sandy">Sandy</SelectItem>
                   <SelectItem value="muted-night">Muted Night</SelectItem>
-                  <SelectItem value="warm-paper">Warm Paper</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-2xl border-border/50 mb-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Location</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="glass-card rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium">Set your location manually</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  placeholder="Latitude (e.g. 24.8607)"
+                  value={manualLatitude}
+                  onChange={(e) => setManualLatitude(e.target.value)}
+                />
+                <Input
+                  placeholder="Longitude (e.g. 67.0011)"
+                  value={manualLongitude}
+                  onChange={(e) => setManualLongitude(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={handleUseCurrentLocation}>
+                  Use current location
+                </Button>
+                <Button
+                  type="button"
+                  variant="hero"
+                  onClick={handleSaveManualLocation}
+                  disabled={isSavingLocation}
+                >
+                  {isSavingLocation ? "Saving..." : "Save location"}
+                </Button>
+                {showApplyLocationAction && (
+                  <Button type="button" variant="soft" onClick={handleApplyLocation}>
+                    Apply this location
+                  </Button>
+                )}
+              </div>
+              {locationStatus && <p className="text-xs text-muted-foreground">{locationStatus}</p>}
             </div>
           </CardContent>
         </Card>

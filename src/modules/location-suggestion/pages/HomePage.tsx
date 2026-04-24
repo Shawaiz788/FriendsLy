@@ -9,16 +9,25 @@ import { Ghost } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { acceptSuggestedHangout, getFriendsLocations, updateMyLocation } from "@/lib/api";
+import {
+  DEFAULT_INTENT_PREFERENCES,
+  loadIntentPreferences,
+  saveIntentPreferences,
+} from "@/modules/intent-aura/services/intentPreferences";
+import {
+  getMyIntentPreferences,
+  upsertMyIntentPreferences,
+} from "@/modules/intent-aura/services/intentPreferencesApi";
 
 const intents = [
   { label: "Free", emoji: "✌️" },
+  { label: "Busy", emoji: "💼" },
   { label: "Studying", emoji: "📚" },
   { label: "Hungry", emoji: "🍕" },
-  { label: "Chilling", emoji: "😎" },
+  { label: "Working", emoji: "💻" },
+  { label: "Exercising", emoji: "🏃" },
+  { label: "Just Chilling", emoji: "😎" },
 ];
-
-const INNER_RADIUS_KM = 1;
-const OUTER_RADIUS_KM = 5;
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
 
@@ -73,7 +82,10 @@ const offsetCoordinateByKm = (
 };
 
 const HomePage = () => {
-  const [activeIntent, setActiveIntent] = useState("Free");
+  const [activeIntent, setActiveIntent] = useState(() => loadIntentPreferences().activeIntent);
+  const [enabledIntents, setEnabledIntents] = useState(() => loadIntentPreferences().enabledIntents);
+  const [innerRadiusKm, setInnerRadiusKm] = useState(() => loadIntentPreferences().innerRadiusKm);
+  const [outerRadiusKm, setOuterRadiusKm] = useState(() => loadIntentPreferences().outerRadiusKm);
   const [ghostMode, setGhostMode] = useState(false);
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [userAvatarUrl, setUserAvatarUrl] = useState("");
@@ -93,6 +105,25 @@ const HomePage = () => {
   const [startingSuggestionFor, setStartingSuggestionFor] = useState<string | null>(null);
   const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
   const navigate = useNavigate();
+
+  const applyPreferences = (
+    preferences: {
+      activeIntent: string;
+      enabledIntents: string[];
+      innerRadiusKm: number;
+      outerRadiusKm: number;
+      autoExpire: boolean;
+    },
+    persistLocal = true,
+  ) => {
+    setActiveIntent(preferences.activeIntent || DEFAULT_INTENT_PREFERENCES.activeIntent);
+    setEnabledIntents(preferences.enabledIntents);
+    setInnerRadiusKm(preferences.innerRadiusKm);
+    setOuterRadiusKm(preferences.outerRadiusKm);
+    if (persistLocal) {
+      saveIntentPreferences(preferences);
+    }
+  };
 
   const requestCurrentLocation = () =>
     new Promise<{ lat: number; lng: number }>((resolve, reject) => {
@@ -132,6 +163,49 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
+    const refreshIntentPreferences = async () => {
+      const localPreferences = loadIntentPreferences();
+      applyPreferences(localPreferences, false);
+
+      if (!token) return;
+      const result = await getMyIntentPreferences(token);
+      if (result?.data) {
+        applyPreferences({
+          activeIntent: result.data.active_intent || localPreferences.activeIntent,
+          enabledIntents: result.data.enabled_intents || localPreferences.enabledIntents,
+          innerRadiusKm: result.data.inner_radius_km ?? localPreferences.innerRadiusKm,
+          outerRadiusKm: result.data.outer_radius_km ?? localPreferences.outerRadiusKm,
+          autoExpire:
+            typeof result.data.auto_expire === "boolean"
+              ? result.data.auto_expire
+              : localPreferences.autoExpire,
+        });
+      }
+    };
+
+    void refreshIntentPreferences();
+    const handleFocus = () => {
+      void refreshIntentPreferences();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    const current = loadIntentPreferences();
+    if (current.activeIntent === activeIntent) return;
+    const next = {
+      ...current,
+      activeIntent,
+    };
+    saveIntentPreferences(next);
+    if (!token) return;
+    void upsertMyIntentPreferences(next, token);
+  }, [activeIntent, token]);
+
+  useEffect(() => {
     if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
@@ -167,14 +241,35 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
+    const handleManualLocationApply = (event: Event) => {
+      const customEvent = event as CustomEvent<{ lat: number; lng: number }>;
+      const nextLat = customEvent?.detail?.lat;
+      const nextLng = customEvent?.detail?.lng;
+      if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
+      // #region agent log
+      fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H3',location:'HomePage.tsx:handleManualLocationApply',message:'Received manual location apply event',data:{lat:nextLat,lng:nextLng},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      setUserLocation({ lat: nextLat, lng: nextLng });
+    };
+
+    window.addEventListener("friendsly-location-updated", handleManualLocationApply);
+    return () => {
+      window.removeEventListener("friendsly-location-updated", handleManualLocationApply);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!token || !userLocation) return;
 
     const syncLocation = async () => {
       try {
-        await updateMyLocation(
+        const result = await updateMyLocation(
           { latitude: userLocation.lat, longitude: userLocation.lng },
           token,
         );
+        // #region agent log
+        fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H4',location:'HomePage.tsx:syncLocation',message:'Auto sync location response',data:{lat:userLocation.lat,lng:userLocation.lng,success:!!result?.success,error:result?.error||null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       } catch (err) {
         console.error("Failed to sync my location", err);
       }
@@ -234,7 +329,7 @@ const HomePage = () => {
 
         const distanceKm = distanceMeters(userPos, [approxLat, approxLng]) / 1000;
         const presence: PositionedFriend["presence"] =
-          distanceKm <= INNER_RADIUS_KM ? "nearby" : distanceKm <= OUTER_RADIUS_KM ? "city" : "away";
+          distanceKm <= innerRadiusKm ? "nearby" : distanceKm <= outerRadiusKm ? "city" : "away";
 
         return {
           userId: friend.user_id,
@@ -249,7 +344,7 @@ const HomePage = () => {
 
     if (realFriends.length > 0) return realFriends;
     return getPositionedFriends(userPos);
-  }, [friendsLocations, userLocation]);
+  }, [friendsLocations, innerRadiusKm, outerRadiusKm, userLocation]);
 
   const suggestedHangouts = useMemo(
     () =>
@@ -384,7 +479,9 @@ const HomePage = () => {
       <div className="px-6 py-4">
         <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">Your intent</p>
         <div className="flex flex-wrap gap-2">
-          {intents.map((intent) => (
+          {intents
+            .filter((intent) => enabledIntents.includes(intent.label))
+            .map((intent) => (
             <IntentBadge
               key={intent.label}
               label={intent.label}
@@ -410,8 +507,8 @@ const HomePage = () => {
           </Button>
         </div>
         <ProximityMap
-          innerRadius={INNER_RADIUS_KM}
-          outerRadius={OUTER_RADIUS_KM}
+          innerRadius={innerRadiusKm}
+          outerRadius={outerRadiusKm}
           userPosition={userLocation ? [userLocation.lat, userLocation.lng] : undefined}
           userAvatarUrl={userAvatarUrl || undefined}
           friends={mapFriends}
@@ -428,7 +525,7 @@ const HomePage = () => {
               userId={suggestion.userId!}
               friendName={suggestion.name}
               intent={suggestion.intent}
-              reason={`You and ${suggestion.name} are within your ${INNER_RADIUS_KM}–${OUTER_RADIUS_KM}km radius and both look available.`}
+              reason={`You and ${suggestion.name} are within your ${innerRadiusKm}-${outerRadiusKm}km radius and both look available.`}
               onStartHangout={handleStartHangout}
               onLater={handleSuggestionLater}
               isStarting={startingSuggestionFor === suggestion.userId}

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Bell, Download, LogOut, Shield, ShieldAlert, Trash2, User, UserX } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { editProfile, updateMyLocation } from "@/lib/api";
 
@@ -58,16 +58,40 @@ const ProfilePage = () => {
   const [quietHours, setQuietHours] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState("sage-coral");
+  const lastLightThemeRef = useRef("sandy");
   const [manualLatitude, setManualLatitude] = useState("");
   const [manualLongitude, setManualLongitude] = useState("");
   const [isSavingLocation, setIsSavingLocation] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
   const [showApplyLocationAction, setShowApplyLocationAction] = useState(false);
 
+  const LIGHT_THEMES = ["sage-coral", "sandy"] as const;
+  const DARK_THEME = "muted-night" as const;
+
+  const normalizeAppearance = (isDark: boolean, theme: string) => {
+    if (isDark) {
+      return { isDark: true, theme: DARK_THEME };
+    }
+
+    const nextTheme = (LIGHT_THEMES as readonly string[]).includes(theme) ? theme : lastLightThemeRef.current;
+    return { isDark: false, theme: nextTheme || "sandy" };
+  };
+
   const applyAppearance = (isDark: boolean, theme: string) => {
     const root = document.documentElement;
     root.classList.toggle("dark", isDark);
     root.setAttribute("data-theme", theme);
+  };
+
+  const applyAndSetAppearance = (nextDark: boolean, nextTheme: string) => {
+    const normalized = normalizeAppearance(nextDark, nextTheme);
+    setDarkMode(normalized.isDark);
+    setSelectedTheme(normalized.theme);
+    if (!normalized.isDark && (LIGHT_THEMES as readonly string[]).includes(normalized.theme)) {
+      lastLightThemeRef.current = normalized.theme;
+    }
+    applyAppearance(normalized.isDark, normalized.theme);
+    return normalized;
   };
 
   const persistAppearance = async (nextDark: boolean, nextTheme: string) => {
@@ -197,9 +221,7 @@ const ProfilePage = () => {
             typeof cached?.selected_theme === "string" && cached.selected_theme
               ? cached.selected_theme
               : "sage-coral";
-          setDarkMode(cachedDarkMode);
-          setSelectedTheme(cachedTheme);
-          applyAppearance(cachedDarkMode, cachedTheme);
+          applyAndSetAppearance(cachedDarkMode, cachedTheme);
         } catch (e) {
           console.error("Failed to parse cached profile:", e);
         }
@@ -229,9 +251,7 @@ const ProfilePage = () => {
             newPhotoFile: undefined
           };
           setProfile(profileData);
-          setDarkMode(Boolean(data.data[0].dark_mode_enabled));
-          setSelectedTheme(data.data[0].selected_theme || "sage-coral");
-          applyAppearance(Boolean(data.data[0].dark_mode_enabled), data.data[0].selected_theme || "sage-coral");
+          applyAndSetAppearance(Boolean(data.data[0].dark_mode_enabled), data.data[0].selected_theme || "sage-coral");
           // Cache the profile for instant loading next time
           localStorage.setItem("cachedProfile", JSON.stringify(profileData));
           // Reset image error state when profile updates
@@ -259,9 +279,7 @@ const ProfilePage = () => {
             newPhotoFile: undefined
           };
           setProfile(profileData);
-          setDarkMode(Boolean(data.data[0].dark_mode_enabled));
-          setSelectedTheme(data.data[0].selected_theme || "sage-coral");
-          applyAppearance(Boolean(data.data[0].dark_mode_enabled), data.data[0].selected_theme || "sage-coral");
+          applyAndSetAppearance(Boolean(data.data[0].dark_mode_enabled), data.data[0].selected_theme || "sage-coral");
           // Update cache
           localStorage.setItem("cachedProfile", JSON.stringify(profileData));
           // Reset image error state
@@ -518,27 +536,44 @@ const ProfilePage = () => {
                 <Switch
                   checked={darkMode}
                   onCheckedChange={(value) => {
-                    setDarkMode(value);
-                    applyAppearance(value, selectedTheme);
-                    void persistAppearance(value, selectedTheme);
+                    if (value) {
+                      if ((LIGHT_THEMES as readonly string[]).includes(selectedTheme)) {
+                        lastLightThemeRef.current = selectedTheme;
+                      }
+                      const normalized = applyAndSetAppearance(true, DARK_THEME);
+                      void persistAppearance(normalized.isDark, normalized.theme);
+                      return;
+                    }
+
+                    const restoredTheme = lastLightThemeRef.current || "sandy";
+                    const normalized = applyAndSetAppearance(false, restoredTheme);
+                    void persistAppearance(normalized.isDark, normalized.theme);
                   }}
                 />
               </div>
               <Select
                 value={selectedTheme}
                 onValueChange={(value) => {
-                  setSelectedTheme(value);
-                  applyAppearance(darkMode, value);
-                  void persistAppearance(darkMode, value);
+                  if (darkMode) {
+                    if (value !== DARK_THEME) return;
+                    const normalized = applyAndSetAppearance(true, value);
+                    void persistAppearance(normalized.isDark, normalized.theme);
+                    return;
+                  }
+
+                  if (!(LIGHT_THEMES as readonly string[]).includes(value)) return;
+                  lastLightThemeRef.current = value;
+                  const normalized = applyAndSetAppearance(false, value);
+                  void persistAppearance(normalized.isDark, normalized.theme);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger disabled={darkMode}>
                   <SelectValue placeholder="Theme preset" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sage-coral">Sage Green</SelectItem>
-                  <SelectItem value="sandy">Sandy</SelectItem>
-                  <SelectItem value="muted-night">Muted Night</SelectItem>
+                  <SelectItem value="sage-coral" disabled={darkMode}>Sage Green</SelectItem>
+                  <SelectItem value="sandy" disabled={darkMode}>Sandy</SelectItem>
+                  <SelectItem value="muted-night" disabled={!darkMode}>Muted Night</SelectItem>
                 </SelectContent>
               </Select>
             </div>

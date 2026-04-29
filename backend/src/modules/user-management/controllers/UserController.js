@@ -3,6 +3,13 @@
 // UserController using ES module export
 const getSupabase = (req) => req.app.get('supabase');
 
+const createAuthenticatedClient = async (token) => {
+  const { createClient } = await import('@supabase/supabase-js');
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+};
+
 const UserController = {
     async checkUsernameAvailability(req, res) {
       const supabase = getSupabase(req);
@@ -91,6 +98,92 @@ const UserController = {
     if (error || !data?.user) return res.status(401).json({ error: 'Invalid token' });
     res.json({ user: { id: data.user.id, email: data.user.email, phone: data.user.phone } });
   },
+  async getMyIntentPreferences(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { data, error } = await authenticatedSupabase
+        .from('user_intent_preferences')
+        .select('active_intent, enabled_intents, inner_radius_km, outer_radius_km, auto_expire')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === '42P01') {
+          return res.status(500).json({
+            error: 'user_intent_preferences table is missing. Apply schema changes first.',
+          });
+        }
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.json({ data: data || null });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+  async upsertMyIntentPreferences(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { active_intent, enabled_intents, inner_radius_km, outer_radius_km, auto_expire } = req.body;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = userData.user.id;
+
+    if (typeof active_intent !== 'string' || !active_intent.trim()) {
+      return res.status(400).json({ error: 'active_intent is required' });
+    }
+    if (!Array.isArray(enabled_intents) || enabled_intents.some((value) => typeof value !== 'string')) {
+      return res.status(400).json({ error: 'enabled_intents must be an array of strings' });
+    }
+    if (!Number.isFinite(inner_radius_km) || !Number.isFinite(outer_radius_km)) {
+      return res.status(400).json({ error: 'inner_radius_km and outer_radius_km must be numbers' });
+    }
+    if (inner_radius_km < 0 || outer_radius_km < 0 || inner_radius_km > outer_radius_km) {
+      return res.status(400).json({ error: 'radius values are invalid' });
+    }
+    if (typeof auto_expire !== 'boolean') {
+      return res.status(400).json({ error: 'auto_expire must be a boolean' });
+    }
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { error } = await authenticatedSupabase
+        .from('user_intent_preferences')
+        .upsert(
+          {
+            user_id: userId,
+            active_intent: active_intent.trim(),
+            enabled_intents,
+            inner_radius_km,
+            outer_radius_km,
+            auto_expire,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
+
+      if (error) {
+        if (error.code === '42P01') {
+          return res.status(500).json({
+            error: 'user_intent_preferences table is missing. Apply schema changes first.',
+          });
+        }
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
   async register(req, res) {
     const supabase = getSupabase(req);
     console.log('========== REGISTRATION REQUEST ==========');
@@ -162,7 +255,7 @@ const UserController = {
   },
   async editProfile(req, res) {
     const supabase = getSupabase(req);
-    const { name, username, photo, interests, date_of_birth, gender } = req.body;
+    const { name, username, photo, interests, date_of_birth, gender, dark_mode_enabled, selected_theme } = req.body;
     const token = req.supabaseToken;
     
     // Get user id from token
@@ -171,12 +264,7 @@ const UserController = {
     const userId = userData.user.id;
     
     // Create an authenticated client with the user's token for RLS
-    const { createClient } = await import('@supabase/supabase-js');
-    const authenticatedSupabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
+    const authenticatedSupabase = await createAuthenticatedClient(token);
     
     // Check if profile exists
     const { data: profileRows, error: selectError } = await authenticatedSupabase.from('user_profiles').select('profile_id').eq('user_id', userId);
@@ -189,7 +277,9 @@ const UserController = {
         profile_photo_url: photo,
         bio: interests,
         date_of_birth: date_of_birth,
-        gender: gender
+        gender: gender,
+        dark_mode_enabled: typeof dark_mode_enabled === 'boolean' ? dark_mode_enabled : false,
+        selected_theme: typeof selected_theme === 'string' && selected_theme.trim() ? selected_theme : 'sage-coral',
       }).eq('user_id', userId);
       if (error) {
         console.log('Profile update error:', error);
@@ -220,7 +310,9 @@ const UserController = {
           profile_photo_url: photo,
           bio: interests,
           date_of_birth: date_of_birth,
-          gender: gender
+          gender: gender,
+          dark_mode_enabled: typeof dark_mode_enabled === 'boolean' ? dark_mode_enabled : false,
+          selected_theme: typeof selected_theme === 'string' && selected_theme.trim() ? selected_theme : 'sage-coral',
         }
       ]);
       if (error) {
@@ -254,12 +346,7 @@ const UserController = {
     if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Invalid token' });
     
     // Create authenticated client for RLS
-    const { createClient } = await import('@supabase/supabase-js');
-    const authenticatedSupabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
+    const authenticatedSupabase = await createAuthenticatedClient(token);
     
     // Query by user_id, not profile_id
     const { data, error } = await authenticatedSupabase.from('user_profiles').select('*').eq('user_id', id);
@@ -345,12 +432,7 @@ const UserController = {
 
     try {
       // Create authenticated client for RLS
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       // Check if request already exists in either direction
       // Case 1: Request from me to them
@@ -451,12 +533,7 @@ const UserController = {
     const addressee_id = userData.user.id;
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       const { error } = await authenticatedSupabase
         .from('friendships')
@@ -481,12 +558,7 @@ const UserController = {
     const addressee_id = userData.user.id;
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       const { error } = await authenticatedSupabase
         .from('friendships')
@@ -511,12 +583,7 @@ const UserController = {
     console.log('👥 Fetching accepted friends for user:', userId);
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       // Get friendships where status is accepted (either direction)
       const { data: friendships, error: friendError } = await authenticatedSupabase
@@ -563,6 +630,9 @@ const UserController = {
     const supabase = getSupabase(req);
     const token = req.supabaseToken;
     const { latitude, longitude } = req.body;
+    // #region agent log
+    fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H2',location:'UserController.js:updateMyLocation:entry',message:'Backend updateMyLocation called',data:{hasToken:!!token,lat:latitude,lng:longitude},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return res.status(400).json({ error: 'latitude and longitude are required numbers' });
@@ -574,12 +644,7 @@ const UserController = {
     const userId = userData.user.id;
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       const { error } = await authenticatedSupabase
         .from('user_locations')
@@ -592,6 +657,9 @@ const UserController = {
           },
           { onConflict: 'user_id' }
         );
+      // #region agent log
+      fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H2',location:'UserController.js:updateMyLocation:upsertResult',message:'Backend location upsert completed',data:{ok:!error,errorCode:error?.code||null,errorMessage:error?.message||null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (error) {
         if (error.code === '42P01') {
@@ -617,12 +685,7 @@ const UserController = {
     const userId = userData.user.id;
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       const { data: friendships, error: friendError } = await authenticatedSupabase
         .from('friendships')
@@ -686,12 +749,7 @@ const UserController = {
     console.log('📥 Fetching incoming requests for user:', addressee_id);
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const authenticatedSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_KEY,
-        { global: { headers: { Authorization: `Bearer ${token}` } } }
-      );
+      const authenticatedSupabase = await createAuthenticatedClient(token);
 
       // Get all pending friend requests where current user is addressee
       const { data: requests, error: requestError } = await authenticatedSupabase

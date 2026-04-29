@@ -33,6 +33,8 @@ router.get('/search', requireAuth, UserController.searchUsers);
 router.get('/friends', requireAuth, UserController.getAcceptedFriends);
 router.get('/friends/locations', requireAuth, UserController.getFriendsLocations);
 router.post('/location', requireAuth, UserController.updateMyLocation);
+router.get('/intent-preferences', requireAuth, UserController.getMyIntentPreferences);
+router.put('/intent-preferences', requireAuth, UserController.upsertMyIntentPreferences);
 router.get('/friend-requests/incoming', requireAuth, UserController.getIncomingFriendRequests);
 router.post('/hangouts/suggested/accept', requireAuth, HangoutController.acceptSuggestedHangout);
 router.get('/hangouts/invites', requireAuth, HangoutController.getMyHangoutInvites);

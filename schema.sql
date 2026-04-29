@@ -77,6 +77,19 @@ CREATE TABLE user_locations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE user_intent_preferences (
+    user_id UUID PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    active_intent VARCHAR(100) NOT NULL DEFAULT 'Free',
+    enabled_intents TEXT[] NOT NULL DEFAULT ARRAY['Free','Busy','Studying','Hungry','Working','Exercising','Just Chilling'],
+    inner_radius_km DOUBLE PRECISION NOT NULL DEFAULT 1,
+    outer_radius_km DOUBLE PRECISION NOT NULL DEFAULT 5,
+    auto_expire BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (inner_radius_km >= 0),
+    CHECK (outer_radius_km >= 0),
+    CHECK (inner_radius_km <= outer_radius_km)
+);
+
 -- ============================================
 -- FRIENDSHIPS
 -- ============================================
@@ -375,6 +388,7 @@ CREATE INDEX idx_hangouts_status ON hangouts(status);
 CREATE INDEX idx_messages_group ON messages(group_id);
 CREATE INDEX idx_stories_expiry ON stories(expires_at);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
+CREATE INDEX idx_user_intent_preferences_updated_at ON user_intent_preferences(updated_at);
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
@@ -433,4 +447,22 @@ CREATE POLICY "Users can insert their own profile"
 ON user_profiles
 FOR INSERT
 WITH CHECK (user_id = auth.uid());
+
+-- Enable RLS on user_intent_preferences
+ALTER TABLE user_intent_preferences ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own intent preferences"
+ON user_intent_preferences
+FOR SELECT
+USING (user_id = auth.uid());
+
+CREATE POLICY "Users can upsert their own intent preferences"
+ON user_intent_preferences
+FOR INSERT
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update their own intent preferences"
+ON user_intent_preferences
+FOR UPDATE
+USING (user_id = auth.uid());
 

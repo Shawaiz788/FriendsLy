@@ -50,14 +50,33 @@ export async function loginUser({ email, password }) {
   return res.json();
 }
 
-export async function editProfile({ name, username, photo, interests, date_of_birth, gender, token }) {
+export async function editProfile({
+  name,
+  username,
+  photo,
+  interests,
+  date_of_birth,
+  gender,
+  dark_mode_enabled,
+  selected_theme,
+  token,
+}) {
   const res = await fetch(`${API_BASE}/api/user/profile`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ name, username, photo, interests, date_of_birth, gender }),
+    body: JSON.stringify({
+      name,
+      username,
+      photo,
+      interests,
+      date_of_birth,
+      gender,
+      dark_mode_enabled,
+      selected_theme,
+    }),
   });
   return res.json();
 }

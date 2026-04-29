@@ -86,7 +86,7 @@ const HomePage = () => {
   const [enabledIntents, setEnabledIntents] = useState(() => loadIntentPreferences().enabledIntents);
   const [innerRadiusKm, setInnerRadiusKm] = useState(() => loadIntentPreferences().innerRadiusKm);
   const [outerRadiusKm, setOuterRadiusKm] = useState(() => loadIntentPreferences().outerRadiusKm);
-  const [ghostMode, setGhostMode] = useState(false);
+  const [ghostMode, setGhostMode] = useState(() => localStorage.getItem("friendsly-ghost-mode") === "1");
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [userAvatarUrl, setUserAvatarUrl] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -161,6 +161,10 @@ const HomePage = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("friendsly-ghost-mode", ghostMode ? "1" : "0");
+  }, [ghostMode]);
 
   useEffect(() => {
     const refreshIntentPreferences = async () => {
@@ -259,7 +263,7 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
-    if (!token || !userLocation) return;
+    if (!token || !userLocation || ghostMode) return;
 
     const syncLocation = async () => {
       try {
@@ -281,7 +285,7 @@ const HomePage = () => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [token, userLocation]);
+  }, [ghostMode, token, userLocation]);
 
   useEffect(() => {
     if (!token) return;
@@ -360,6 +364,14 @@ const HomePage = () => {
       toast({
         title: "Not logged in",
         description: "Login is required before updating location.",
+      });
+      return;
+    }
+
+    if (ghostMode) {
+      toast({
+        title: "Ghost mode is on",
+        description: "Disable Ghost Mode to share your live location.",
       });
       return;
     }
@@ -464,14 +476,38 @@ const HomePage = () => {
           <h1 className="font-serif text-2xl font-bold text-foreground">Hey there 👋</h1>
         </div>
         <button
-          onClick={() => setGhostMode(!ghostMode)}
+          type="button"
+          onClick={() => {
+            setGhostMode((prev) => {
+              const next = !prev;
+              toast({
+                title: next ? "Ghost Mode enabled" : "Ghost Mode disabled",
+                description: next
+                  ? "Location sharing is paused."
+                  : "Location sharing is active again.",
+              });
+              return next;
+            });
+          }}
           className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-            ghostMode ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
+            "h-10 px-3 rounded-full flex items-center gap-2 transition-all border",
+            ghostMode
+              ? "bg-foreground/10 text-foreground border-foreground/20"
+              : "bg-muted text-muted-foreground border-border/50",
           )}
-          title="Ghost Mode"
+          aria-pressed={ghostMode}
+          title="Ghost Mode (pause location sharing)"
         >
           <Ghost className="w-5 h-5" />
+          <span className="text-sm font-medium">Ghost Mode</span>
+          <span
+            className={cn(
+              "text-[11px] font-semibold px-2 py-0.5 rounded-full",
+              ghostMode ? "bg-primary/10 text-primary" : "bg-transparent text-muted-foreground/70",
+            )}
+          >
+            {ghostMode ? "ON" : "OFF"}
+          </span>
         </button>
       </div>
 

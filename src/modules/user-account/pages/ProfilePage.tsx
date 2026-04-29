@@ -8,6 +8,15 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, Download, LogOut, Shield, ShieldAlert, Trash2, User, UserX } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { editProfile, updateMyLocation } from "@/lib/api";
 
 async function fetchProfile(token) {
@@ -64,6 +73,17 @@ const ProfilePage = () => {
   const [isSavingLocation, setIsSavingLocation] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
   const [showApplyLocationAction, setShowApplyLocationAction] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadSelection, setDownloadSelection] = useState({
+    profile: true,
+    intent: true,
+    location: true,
+    friends: true,
+    hangouts: true,
+    chats: false,
+    posts: true,
+  });
 
   const LIGHT_THEMES = ["sage-coral", "sandy"] as const;
   const DARK_THEME = "muted-night" as const;
@@ -331,6 +351,56 @@ const ProfilePage = () => {
     localStorage.removeItem("supabaseToken");
     localStorage.removeItem("cachedProfile");
     navigate("/");
+  };
+
+  const toggleDownloadKey = (key: keyof typeof downloadSelection) => {
+    setDownloadSelection((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleDownloadData = async () => {
+    if (!token) {
+      setEditError("Please log in first.");
+      return;
+    }
+
+    const include = Object.entries(downloadSelection)
+      .filter(([, enabled]) => enabled)
+      .map(([k]) => k)
+      .join(",");
+
+    if (!include) {
+      setEditError("Select at least one category to download.");
+      return;
+    }
+
+    setIsDownloading(true);
+    setEditError("");
+    try {
+      const res = await fetch(`http://localhost:3001/api/user/download?include=${encodeURIComponent(include)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json?.success || !json?.export) {
+        throw new Error(json?.error || "Download failed");
+      }
+
+      const fileName = `friendsly-export-${new Date().toISOString().slice(0, 10)}.json`;
+      const blob = new Blob([JSON.stringify(json.export, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setDownloadOpen(false);
+    } catch (err: any) {
+      setEditError(err?.message || "Download failed");
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -630,7 +700,14 @@ const ProfilePage = () => {
             <Button variant="outline" className="w-full justify-start">
               <UserX className="w-4 h-4" /> Deactivate account
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => {
+                setEditError("");
+                setDownloadOpen(true);
+              }}
+            >
               <Download className="w-4 h-4" /> Download my data
             </Button>
             <Button variant="outline" className="w-full justify-start" onClick={handleLogout}>
@@ -642,6 +719,55 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Download my data</DialogTitle>
+            <DialogDescription>Select what you want to export.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.profile} onCheckedChange={() => toggleDownloadKey("profile")} />
+              <span className="text-sm">Profile + account</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.intent} onCheckedChange={() => toggleDownloadKey("intent")} />
+              <span className="text-sm">Intent preferences</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.location} onCheckedChange={() => toggleDownloadKey("location")} />
+              <span className="text-sm">Last known location</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.friends} onCheckedChange={() => toggleDownloadKey("friends")} />
+              <span className="text-sm">Friends + requests</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.hangouts} onCheckedChange={() => toggleDownloadKey("hangouts")} />
+              <span className="text-sm">Hangouts + participation</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.chats} onCheckedChange={() => toggleDownloadKey("chats")} />
+              <span className="text-sm">Group chats + messages</span>
+            </label>
+            <label className="flex items-center gap-3">
+              <Checkbox checked={downloadSelection.posts} onCheckedChange={() => toggleDownloadKey("posts")} />
+              <span className="text-sm">Posts + my likes/comments</span>
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDownloadOpen(false)} disabled={isDownloading}>
+              Cancel
+            </Button>
+            <Button variant="hero" type="button" onClick={handleDownloadData} disabled={isDownloading}>
+              {isDownloading ? "Preparing…" : "Download"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>

@@ -347,20 +347,189 @@ const UserController = {
   },
   async downloadData(req, res) {
     const supabase = getSupabase(req);
-    const { id } = req.query;
+    const { id, include } = req.query;
     const token = req.supabaseToken;
     
     // Verify the token and user
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Invalid token' });
+
+    const userId = userData.user.id;
+
+    // Backward compatible behavior: if no include= is provided, return only user_profiles
+    // (existing callers rely on { data: [...] }).
+    if (!include) {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const targetUserId = typeof id === 'string' && id ? id : userId;
+      if (targetUserId !== userId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      // Query by user_id, not profile_id
+      const { data, error } = await authenticatedSupabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', targetUserId);
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json({ data });
+    }
     
-    // Create authenticated client for RLS
+    const requested = String(include)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const includes = requested.length > 0 ? Array.from(new Set(requested)) : ['profile'];
+
     const authenticatedSupabase = await createAuthenticatedClient(token);
-    
-    // Query by user_id, not profile_id
-    const { data, error } = await authenticatedSupabase.from('user_profiles').select('*').eq('user_id', id);
-    if (error) return res.status(400).json({ error: error.message });
-    res.json({ data });
+
+    const safeSelect = async (table, queryFn) => {
+      try {
+        const result = await queryFn();
+        if (result?.error?.code === '42P01') {
+          return { data: [], missingTable: table };
+        }
+        if (result?.error) {
+          return { data: [], error: result.error.message, table };
+        }
+        return { data: result?.data ?? [] };
+      } catch (err) {
+        return { data: [], error: err.message, table };
+      }
+    };
+
+    const exportData = {
+      generated_at: new Date().toISOString(),
+      user_id: userId,
+      includes,
+      data: {},
+      warnings: [],
+    };
+
+    if (includes.includes('profile')) {
+      const account = await safeSelect('users', () =>
+        authenticatedSupabase.from('users').select('*').eq('user_id', userId).maybeSingle(),
+      );
+      const profile = await safeSelect('user_profiles', () =>
+        authenticatedSupabase.from('user_profiles').select('*').eq('user_id', userId).maybeSingle(),
+      );
+
+      if (account.missingTable) exportData.warnings.push(`Missing table: ${account.missingTable}`);
+      if (profile.missingTable) exportData.warnings.push(`Missing table: ${profile.missingTable}`);
+      if (account.error) exportData.warnings.push(`users: ${account.error}`);
+      if (profile.error) exportData.warnings.push(`user_profiles: ${profile.error}`);
+
+      exportData.data.profile = {
+        account: account.data || null,
+        profile: profile.data || null,
+      };
+    }
+
+    if (includes.includes('intent')) {
+      const intentPrefs = await safeSelect('user_intent_preferences', () =>
+        authenticatedSupabase.from('user_intent_preferences').select('*').eq('user_id', userId).maybeSingle(),
+      );
+      if (intentPrefs.missingTable) exportData.warnings.push(`Missing table: ${intentPrefs.missingTable}`);
+      if (intentPrefs.error) exportData.warnings.push(`user_intent_preferences: ${intentPrefs.error}`);
+      exportData.data.intent = intentPrefs.data || null;
+    }
+
+    if (includes.includes('location')) {
+      const location = await safeSelect('user_locations', () =>
+        authenticatedSupabase.from('user_locations').select('*').eq('user_id', userId).maybeSingle(),
+      );
+      if (location.missingTable) exportData.warnings.push(`Missing table: ${location.missingTable}`);
+      if (location.error) exportData.warnings.push(`user_locations: ${location.error}`);
+      exportData.data.location = location.data || null;
+    }
+
+    if (includes.includes('friends')) {
+      const friendships = await safeSelect('friendships', () =>
+        authenticatedSupabase
+          .from('friendships')
+          .select('*')
+          .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+          .order('created_at', { ascending: false }),
+      );
+      if (friendships.missingTable) exportData.warnings.push(`Missing table: ${friendships.missingTable}`);
+      if (friendships.error) exportData.warnings.push(`friendships: ${friendships.error}`);
+      exportData.data.friends = friendships.data;
+    }
+
+    if (includes.includes('hangouts')) {
+      const participants = await safeSelect('hangout_participants', () =>
+        authenticatedSupabase.from('hangout_participants').select('*').eq('user_id', userId),
+      );
+      if (participants.missingTable) exportData.warnings.push(`Missing table: ${participants.missingTable}`);
+      if (participants.error) exportData.warnings.push(`hangout_participants: ${participants.error}`);
+
+      const hangoutIds = Array.from(new Set((participants.data || []).map((p) => p.hangout_id)));
+      const hangouts = hangoutIds.length
+        ? await safeSelect('hangouts', () =>
+            authenticatedSupabase.from('hangouts').select('*').in('hangout_id', hangoutIds),
+          )
+        : { data: [] };
+
+      if (hangouts.missingTable) exportData.warnings.push(`Missing table: ${hangouts.missingTable}`);
+      if (hangouts.error) exportData.warnings.push(`hangouts: ${hangouts.error}`);
+
+      exportData.data.hangouts = {
+        participants: participants.data,
+        hangouts: hangouts.data,
+      };
+    }
+
+    if (includes.includes('chats')) {
+      const memberships = await safeSelect('group_members', () =>
+        authenticatedSupabase.from('group_members').select('*').eq('user_id', userId),
+      );
+      if (memberships.missingTable) exportData.warnings.push(`Missing table: ${memberships.missingTable}`);
+      if (memberships.error) exportData.warnings.push(`group_members: ${memberships.error}`);
+
+      const groupIds = Array.from(new Set((memberships.data || []).map((m) => m.group_id)));
+      const groups = groupIds.length
+        ? await safeSelect('group_chats', () => authenticatedSupabase.from('group_chats').select('*').in('group_id', groupIds))
+        : { data: [] };
+      const messages = groupIds.length
+        ? await safeSelect('messages', () =>
+            authenticatedSupabase.from('messages').select('*').in('group_id', groupIds).order('created_at', { ascending: true }).limit(5000),
+          )
+        : { data: [] };
+
+      if (groups.missingTable) exportData.warnings.push(`Missing table: ${groups.missingTable}`);
+      if (groups.error) exportData.warnings.push(`group_chats: ${groups.error}`);
+      if (messages.missingTable) exportData.warnings.push(`Missing table: ${messages.missingTable}`);
+      if (messages.error) exportData.warnings.push(`messages: ${messages.error}`);
+
+      exportData.data.chats = {
+        memberships: memberships.data,
+        groups: groups.data,
+        messages: messages.data,
+      };
+    }
+
+    if (includes.includes('posts')) {
+      const posts = await safeSelect('posts', () =>
+        authenticatedSupabase.from('posts').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+      );
+      const postLikes = await safeSelect('post_likes', () => authenticatedSupabase.from('post_likes').select('*').eq('user_id', userId));
+      const postComments = await safeSelect('post_comments', () =>
+        authenticatedSupabase.from('post_comments').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+      );
+
+      for (const r of [posts, postLikes, postComments]) {
+        if (r.missingTable) exportData.warnings.push(`Missing table: ${r.missingTable}`);
+        if (r.error) exportData.warnings.push(`${r.table}: ${r.error}`);
+      }
+
+      exportData.data.posts = {
+        posts: posts.data,
+        likes: postLikes.data,
+        comments: postComments.data,
+      };
+    }
+
+    return res.json({ success: true, export: exportData });
   },
   async verify(req, res) {
     res.json({ message: 'Verification handled by Supabase.' });

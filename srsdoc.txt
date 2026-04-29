@@ -32,13 +32,13 @@ AI-powered personalization engine
 3. Functional Requirements
 
 3.1 User Account Management
- FR1: The system shall allow users to register using email or phone number.
- FR2: The system shall require profile creation (name, photo, interests).
- FR3: The system shall allow profile editing.
+ FR1: The system shall allow users to register using email or phone number.(DONE)
+ FR2: The system shall require profile creation (name, photo, interests).(DONE)
+ FR3: The system shall allow profile editing.(DONE)
  FR4: The system shall allow account deactivation.
  FR5: The system shall allow permanent account deletion.
  FR6: The system shall allow users to download their data.
- FR7: The system shall verify email address or phone number during registration.
+ FR7: The system shall verify email address or phone number during registration.(DONE)
  FR8: The system shall automatically terminate inactive sessions after a defined timeout period.
  FR9: The system shall allow users to log out from all active devices simultaneously.
 

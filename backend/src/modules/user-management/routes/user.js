@@ -2,14 +2,22 @@ import express from 'express';
 import multer from 'multer';
 import UserController from '../controllers/UserController.js';
 import HangoutController from '../controllers/HangoutController.js';
+import MediaController from '../controllers/MediaController.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // Middleware to check Supabase JWT
 function requireAuth(req, res, next) {
-	const token = req.headers['authorization']?.replace('Bearer ', '');
+	const rawAuth = req.headers['authorization'] || '';
+	const token = String(rawAuth).replace(/^Bearer\s+/i, '').trim();
 	if (!token) return res.status(401).json({ error: 'Missing auth token' });
+
+	// Basic JWT shape check (3 segments). Prevents confusing Supabase "Invalid Compact JWS" errors.
+	if (token.split('.').length !== 3) {
+		return res.status(401).json({ error: 'Invalid auth token (expected JWT)' });
+	}
+
 	req.supabaseToken = token;
 	next();
 }
@@ -43,6 +51,15 @@ router.get('/hangouts/mine', requireAuth, HangoutController.getMyHangouts);
 router.get('/groups/:groupId/messages', requireAuth, HangoutController.getGroupMessages);
 router.post('/groups/:groupId/messages', requireAuth, HangoutController.sendGroupMessage);
 router.post('/groups/:groupId/media', requireAuth, upload.single('file'), HangoutController.uploadGroupMedia);
+
+// Media (feed/posts)
+router.get('/media/feed', requireAuth, MediaController.getFeed);
+router.post('/media/upload', requireAuth, upload.single('file'), MediaController.uploadPostMedia);
+router.post('/media/posts', requireAuth, MediaController.createPost);
+router.post('/media/posts/:postId/like', requireAuth, MediaController.toggleLike);
+router.get('/media/posts/:postId/comments', requireAuth, MediaController.getComments);
+router.post('/media/posts/:postId/comments', requireAuth, MediaController.addComment);
+
 router.get('/capsules/:capsuleId', requireAuth, HangoutController.getCapsuleDetails);
 router.post('/capsules/:capsuleId/reflections', requireAuth, HangoutController.addCapsuleReflection);
 router.get('/:userId/profile', requireAuth, UserController.getUserProfile);

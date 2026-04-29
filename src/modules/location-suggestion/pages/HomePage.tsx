@@ -5,10 +5,10 @@ import ProximityMap, { getPositionedFriends, type PositionedFriend } from "@/com
 import IntentBadge from "@/components/IntentBadge";
 import SuggestionCard from "@/components/SuggestionCard";
 import { Button } from "@/components/ui/button";
-import { Ghost } from "lucide-react";
+import { Bell, Ghost } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { acceptSuggestedHangout, getFriendsLocations, updateMyLocation } from "@/lib/api";
+import { acceptSuggestedHangout, getFriendsLocations, getMyHangoutInvites, updateMyLocation } from "@/lib/api";
 import {
   DEFAULT_INTENT_PREFERENCES,
   loadIntentPreferences,
@@ -104,6 +104,7 @@ const HomePage = () => {
   >([]);
   const [startingSuggestionFor, setStartingSuggestionFor] = useState<string | null>(null);
   const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
+  const [inviteCount, setInviteCount] = useState(0);
   const navigate = useNavigate();
 
   const applyPreferences = (
@@ -161,6 +162,24 @@ const HomePage = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const loadInvites = async () => {
+      try {
+        const result = await getMyHangoutInvites(token);
+        const count = Array.isArray(result?.data) ? result.data.length : 0;
+        setInviteCount(count);
+      } catch {
+        setInviteCount(0);
+      }
+    };
+
+    void loadInvites();
+    const intervalId = window.setInterval(loadInvites, 15_000);
+    return () => window.clearInterval(intervalId);
+  }, [token]);
 
   useEffect(() => {
     localStorage.setItem("friendsly-ghost-mode", ghostMode ? "1" : "0");
@@ -509,6 +528,27 @@ const HomePage = () => {
             {ghostMode ? "ON" : "OFF"}
           </span>
         </button>
+      </div>
+
+      <div className="px-6 pb-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-between"
+          onClick={() => navigate("/notifications")}
+        >
+          <span className="flex items-center gap-2">
+            <Bell className="w-4 h-4" />
+            Alerts
+          </span>
+          {inviteCount > 0 ? (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
+              {inviteCount}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">0</span>
+          )}
+        </Button>
       </div>
 
       {/* Current intent */}

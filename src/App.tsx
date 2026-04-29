@@ -13,6 +13,7 @@ import NotificationsPage from "./modules/safety-emergency/pages/NotificationsPag
 import SettingsPage from "./modules/user-account/pages/SettingsPage";
 import SearchPage from "./modules/friends-interaction/pages/SearchPage";
 import SocialPage from "./modules/content-creation/pages/SocialPage";
+import MediaPage from "./modules/content-creation/pages/MediaPage";
 import UserProfilePage from "./modules/user-account/pages/UserProfilePage";
 import NotFound from "./modules/core/pages/NotFound";
 
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/profile" element={<Navigate to="/settings" replace />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/social" element={<SocialPage />} />
+          <Route path="/media" element={<MediaPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/user/:userId" element={<UserProfilePage />} />
           <Route path="*" element={<NotFound />} />

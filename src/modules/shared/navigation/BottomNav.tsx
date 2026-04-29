@@ -1,14 +1,13 @@
-import { Home, Users, Target, Bell, Search, Clapperboard, Settings } from "lucide-react";
+import { Home, Users, Target, Clapperboard, Image, Settings } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/home" },
+  { icon: Image, label: "Media", path: "/media" },
   { icon: Clapperboard, label: "Social", path: "/social" },
-  { icon: Search, label: "Search", path: "/search" },
   { icon: Users, label: "Friends", path: "/friends" },
   { icon: Target, label: "Intent", path: "/intent" },
-  { icon: Bell, label: "Alerts", path: "/notifications" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 

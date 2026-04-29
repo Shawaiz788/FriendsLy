@@ -69,7 +69,16 @@ const UserController = {
 
       if (error) {
         console.log('❌ Storage upload error:', error);
-        return res.status(400).json({ error: error.message });
+
+        const msg = String(error.message || '');
+        if (msg.toLowerCase().includes('invalid compact jws')) {
+          return res.status(500).json({
+            error:
+              'Storage auth failed (Invalid Compact JWS). Update SUPABASE_SERVICE_ROLE_KEY in backend/.env to the current project API service_role key (it changes when JWT is rotated).',
+          });
+        }
+
+        return res.status(400).json({ error: msg });
       }
 
       console.log('✅ File uploaded to storage:', data);

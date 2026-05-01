@@ -585,8 +585,8 @@ const HomePage = () => {
         <ProximityMap
           innerRadius={innerRadiusKm}
           outerRadius={outerRadiusKm}
-          userPosition={userLocation ? [userLocation.lat, userLocation.lng] : undefined}
-          userAvatarUrl={userAvatarUrl || undefined}
+          userPosition={!ghostMode && userLocation ? [userLocation.lat, userLocation.lng] : undefined}
+          userAvatarUrl={!ghostMode ? userAvatarUrl || undefined : undefined}
           friends={mapFriends}
         />
       </div>

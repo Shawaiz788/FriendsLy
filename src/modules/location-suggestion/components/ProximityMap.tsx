@@ -59,7 +59,13 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
   const innerCircleRef = useRef<L.Circle | null>(null);
   const outerCircleRef = useRef<L.Circle | null>(null);
   const friendLayerRef = useRef<L.LayerGroup | null>(null);
+  const hasUserPosition = Array.isArray(userPosition);
   const currentUserPos = userPosition ?? DEFAULT_USER_POS;
+  const mapCenter = useMemo<[number, number]>(() => {
+    if (hasUserPosition && userPosition) return userPosition;
+    if (friends && friends.length > 0) return [friends[0].lat, friends[0].lng];
+    return DEFAULT_USER_POS;
+  }, [friends, hasUserPosition, userPosition]);
 
   const positionedFriends = useMemo(() => {
     if (friends && friends.length > 0) return friends;
@@ -93,57 +99,73 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
     if (!mapRef.current) return;
 
     const map = mapRef.current;
-    map.setView(currentUserPos, map.getZoom(), { animate: false });
+    map.setView(mapCenter, map.getZoom(), { animate: false });
 
-    if (!outerCircleRef.current) {
-      outerCircleRef.current = L.circle(currentUserPos, {
-        radius: outerRadius * 1000,
-        color: "hsl(150, 30%, 45%)",
-        weight: 2,
-        fillColor: "hsl(150, 30%, 45%)",
-        fillOpacity: 0.06,
-        dashArray: "8 6",
-      }).addTo(map);
+    if (hasUserPosition) {
+      if (!outerCircleRef.current) {
+        outerCircleRef.current = L.circle(currentUserPos, {
+          radius: outerRadius * 1000,
+          color: "hsl(150, 30%, 45%)",
+          weight: 2,
+          fillColor: "hsl(150, 30%, 45%)",
+          fillOpacity: 0.06,
+          dashArray: "8 6",
+        }).addTo(map);
+      } else {
+        outerCircleRef.current.setLatLng(currentUserPos);
+        outerCircleRef.current.setRadius(outerRadius * 1000);
+      }
+
+      if (!innerCircleRef.current) {
+        innerCircleRef.current = L.circle(currentUserPos, {
+          radius: innerRadius * 1000,
+          color: "hsl(15, 70%, 65%)",
+          weight: 2,
+          fillColor: "hsl(15, 70%, 65%)",
+          fillOpacity: 0.08,
+        }).addTo(map);
+      } else {
+        innerCircleRef.current.setLatLng(currentUserPos);
+        innerCircleRef.current.setRadius(innerRadius * 1000);
+      }
     } else {
-      outerCircleRef.current.setLatLng(currentUserPos);
-      outerCircleRef.current.setRadius(outerRadius * 1000);
+      if (outerCircleRef.current) {
+        map.removeLayer(outerCircleRef.current);
+        outerCircleRef.current = null;
+      }
+      if (innerCircleRef.current) {
+        map.removeLayer(innerCircleRef.current);
+        innerCircleRef.current = null;
+      }
     }
 
-    if (!innerCircleRef.current) {
-      innerCircleRef.current = L.circle(currentUserPos, {
-        radius: innerRadius * 1000,
-        color: "hsl(15, 70%, 65%)",
-        weight: 2,
-        fillColor: "hsl(15, 70%, 65%)",
-        fillOpacity: 0.08,
-      }).addTo(map);
-    } else {
-      innerCircleRef.current.setLatLng(currentUserPos);
-      innerCircleRef.current.setRadius(innerRadius * 1000);
-    }
+    if (hasUserPosition) {
+      const safeUserAvatarUrl =
+        typeof userAvatarUrl === "string" && userAvatarUrl.length > 0
+          ? userAvatarUrl.replace(/"/g, "&quot;")
+          : "";
 
-    const safeUserAvatarUrl =
-      typeof userAvatarUrl === "string" && userAvatarUrl.length > 0
-        ? userAvatarUrl.replace(/"/g, "&quot;")
-        : "";
+      const userMarkerInner = safeUserAvatarUrl
+        ? `<img src="${safeUserAvatarUrl}" alt="You" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`
+        : "<span style='color:white;font-weight:700;font-size:13px;font-family:\"DM Sans\",sans-serif;'>You</span>";
 
-    const userMarkerInner = safeUserAvatarUrl
-      ? `<img src="${safeUserAvatarUrl}" alt="You" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`
-      : "<span style='color:white;font-weight:700;font-size:13px;font-family:\"DM Sans\",sans-serif;'>You</span>";
+      const userIcon = L.divIcon({
+        className: "",
+        html: `<div style="position:relative;width:52px;height:64px;display:flex;align-items:flex-end;justify-content:center;"><div style="position:absolute;top:0;left:50%;transform:translateX(-50%);background:white;color:hsl(150,30%,35%);font-weight:700;font-size:11px;font-family:'DM Sans',sans-serif;padding:2px 8px;border-radius:999px;border:1px solid hsl(150,30%,45%);box-shadow:0 2px 8px rgba(0,0,0,0.1);line-height:1;">You</div><div style="width:44px;height:44px;border-radius:50%;background:hsl(150,30%,45%);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px hsla(150,30%,45%,0.4);border:3px solid white;overflow:hidden;">${userMarkerInner}</div></div>`,
+        iconSize: [52, 64],
+        iconAnchor: [26, 52],
+      });
 
-    const userIcon = L.divIcon({
-      className: "",
-      html: `<div style="position:relative;width:52px;height:64px;display:flex;align-items:flex-end;justify-content:center;"><div style="position:absolute;top:0;left:50%;transform:translateX(-50%);background:white;color:hsl(150,30%,35%);font-weight:700;font-size:11px;font-family:'DM Sans',sans-serif;padding:2px 8px;border-radius:999px;border:1px solid hsl(150,30%,45%);box-shadow:0 2px 8px rgba(0,0,0,0.1);line-height:1;">You</div><div style="width:44px;height:44px;border-radius:50%;background:hsl(150,30%,45%);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px hsla(150,30%,45%,0.4);border:3px solid white;overflow:hidden;">${userMarkerInner}</div></div>`,
-      iconSize: [52, 64],
-      iconAnchor: [26, 52],
-    });
-
-    if (!userMarkerRef.current) {
-      userMarkerRef.current = L.marker(currentUserPos, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
-    } else {
-      userMarkerRef.current.setLatLng(currentUserPos);
-      userMarkerRef.current.setIcon(userIcon);
-      userMarkerRef.current.setZIndexOffset(1000);
+      if (!userMarkerRef.current) {
+        userMarkerRef.current = L.marker(currentUserPos, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+      } else {
+        userMarkerRef.current.setLatLng(currentUserPos);
+        userMarkerRef.current.setIcon(userIcon);
+        userMarkerRef.current.setZIndexOffset(1000);
+      }
+    } else if (userMarkerRef.current) {
+      map.removeLayer(userMarkerRef.current);
+      userMarkerRef.current = null;
     }
 
     if (friendLayerRef.current) {
@@ -177,7 +199,7 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
 
     friendLayer.addTo(map);
     friendLayerRef.current = friendLayer;
-  }, [innerRadius, outerRadius, currentUserPos, positionedFriends]);
+  }, [hasUserPosition, innerRadius, mapCenter, outerRadius, currentUserPos, positionedFriends, userAvatarUrl]);
 
   return (
     <div

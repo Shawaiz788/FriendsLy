@@ -8,6 +8,7 @@ import Login from "./modules/auth/pages/Login";
 import SignUp from "./modules/auth/pages/SignUp";
 import HomePage from "./modules/location-suggestion/pages/HomePage";
 import FriendsPage from "./modules/friends-interaction/pages/FriendsPage";
+import DirectChatPage from "./modules/friends-interaction/pages/DirectChatPage";
 import IntentPage from "./modules/intent-aura/pages/IntentPage";
 import NotificationsPage from "./modules/safety-emergency/pages/NotificationsPage";
 import SettingsPage from "./modules/user-account/pages/SettingsPage";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/signup" element={<SignUp />} />
           <Route path="/home" element={<HomePage />} />
           <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/chat/:friendId" element={<DirectChatPage />} />
           <Route path="/intent" element={<IntentPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/profile" element={<Navigate to="/settings" replace />} />

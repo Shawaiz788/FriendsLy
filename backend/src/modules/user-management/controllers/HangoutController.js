@@ -95,6 +95,44 @@ const ensureGroupMember = async (supabase, groupId, userId, role = 'member') => 
   if (error) throw error;
 };
 
+const ensureAcceptedFriendship = async (supabase, userId, friendId) => {
+  const { data: friendship, error: friendshipError } = await supabase
+    .from('friendships')
+    .select('status')
+    .or(
+      `and(requester_id.eq.${userId},addressee_id.eq.${friendId}),and(requester_id.eq.${friendId},addressee_id.eq.${userId})`,
+    )
+    .maybeSingle();
+
+  if (friendshipError) throw friendshipError;
+  return friendship?.status === 'accepted';
+};
+
+const findDirectChatGroupId = async (supabase, userId, friendId) => {
+  const { data: userGroups, error: userGroupsError } = await supabase
+    .from('group_members')
+    .select('group_id, group_chats!inner(is_temporary, hangout_id)')
+    .eq('user_id', userId)
+    .eq('group_chats.is_temporary', false)
+    .is('group_chats.hangout_id', null);
+
+  if (userGroupsError) throw userGroupsError;
+
+  const candidateGroupIds = Array.from(new Set((userGroups || []).map((row) => row.group_id)));
+  if (!candidateGroupIds.length) return null;
+
+  const { data: friendMembership, error: friendMembershipError } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', friendId)
+    .in('group_id', candidateGroupIds)
+    .limit(1)
+    .maybeSingle();
+
+  if (friendMembershipError) throw friendMembershipError;
+  return friendMembership?.group_id || null;
+};
+
 const getOpenSharedHangout = async (supabase, userId, suggestedUserId) => {
   const { data: myRows, error: myRowsError } = await supabase
     .from('hangout_participants')
@@ -405,6 +443,61 @@ const HangoutController = {
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Hangout tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getOrCreateDirectChat(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { friend_id } = req.body;
+
+    if (!friend_id) {
+      return res.status(400).json({ error: 'friend_id is required' });
+    }
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      if (userId === friend_id) {
+        return res.status(400).json({ error: 'Cannot create a direct chat with yourself' });
+      }
+
+      const supabase = await createAuthenticatedClient(token);
+      const isFriend = await ensureAcceptedFriendship(supabase, userId, friend_id);
+
+      if (!isFriend) {
+        return res.status(403).json({ error: 'Direct chats are only available for accepted friends' });
+      }
+
+      let groupId = await findDirectChatGroupId(supabase, userId, friend_id);
+
+      if (!groupId) {
+        const { data: newGroup, error: groupInsertError } = await supabase
+          .from('group_chats')
+          .insert([
+            {
+              is_temporary: false,
+              auto_delete_at: null,
+            },
+          ])
+          .select('group_id')
+          .single();
+
+        if (groupInsertError) throw groupInsertError;
+
+        groupId = newGroup.group_id;
+        await ensureGroupMember(supabase, groupId, userId, 'owner');
+        await ensureGroupMember(supabase, groupId, friend_id, 'member');
+      }
+
+      return res.json({ success: true, group_id: groupId });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'Chat tables are missing. Apply schema.sql to your database.' });
       }
       return res.status(500).json({ error: error.message });
     }

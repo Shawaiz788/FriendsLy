@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import FriendCard from "@/components/FriendCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, UserPlus, Check, X, UserCheck, Clock, User } from "lucide-react";
+import { Search, UserPlus, Check, X, UserCheck, Clock, User, MessageCircle } from "lucide-react";
 import {
   getIncomingFriendRequests,
   acceptFriendRequest,
@@ -39,6 +40,7 @@ interface SearchResult {
 }
 
 const FriendsPage = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"friends" | "find">("friends");
   const [search, setSearch] = useState("");
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([]);
@@ -178,6 +180,10 @@ const FriendsPage = () => {
     }
   };
 
+  const handleStartChat = (friend: Friend) => {
+    navigate(`/chat/${friend.user_id}`);
+  };
+
   const findButtonForStatus = (userId: string) => {
     const status = requestStatus[userId] || "none";
     if (status === "accepted") {
@@ -298,6 +304,15 @@ const FriendsPage = () => {
                         <p className="font-semibold text-foreground text-sm">{friend.full_name}</p>
                         <p className="text-xs text-muted-foreground">@{friend.username}</p>
                       </div>
+                      <Button
+                        size="sm"
+                        variant="soft"
+                        onClick={() => handleStartChat(friend)}
+                        className="flex items-center gap-1"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Chat
+                      </Button>
                     </div>
                   </div>
                 ))

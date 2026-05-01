@@ -77,6 +77,19 @@ export async function getMyHangouts(token: string) {
   return parseResponseSafe(res);
 }
 
+export async function getOrCreateDirectChat(friendId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/chats/direct`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ friend_id: friendId }),
+  });
+
+  return parseResponseSafe(res);
+}
+
 export async function getGroupMessages(groupId: string, token: string) {
   const res = await fetch(`${API_BASE}/api/user/groups/${groupId}/messages`, {
     headers: {

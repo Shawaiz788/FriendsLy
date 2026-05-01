@@ -48,6 +48,7 @@ router.post('/hangouts/suggested/accept', requireAuth, HangoutController.acceptS
 router.get('/hangouts/invites', requireAuth, HangoutController.getMyHangoutInvites);
 router.post('/hangouts/:hangoutId/respond', requireAuth, HangoutController.respondToHangoutInvite);
 router.get('/hangouts/mine', requireAuth, HangoutController.getMyHangouts);
+router.post('/chats/direct', requireAuth, HangoutController.getOrCreateDirectChat);
 router.get('/groups/:groupId/messages', requireAuth, HangoutController.getGroupMessages);
 router.post('/groups/:groupId/messages', requireAuth, HangoutController.sendGroupMessage);
 router.post('/groups/:groupId/media', requireAuth, upload.single('file'), HangoutController.uploadGroupMedia);

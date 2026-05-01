@@ -101,7 +101,7 @@ export async function getGroupMessages(groupId: string, token: string) {
 }
 
 type ChatMessagePayload = {
-  kind: "text" | "image" | "voice" | "location";
+  kind: "text" | "image" | "video" | "voice" | "location";
   text?: string;
   url?: string;
   latitude?: number;
@@ -167,6 +167,29 @@ export async function addCapsuleReflection(capsuleId: string, reflectionText: st
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ reflection_text: reflectionText }),
+  });
+
+  return parseResponseSafe(res);
+}
+
+export async function addCapsuleMedia(
+  capsuleId: string,
+  {
+    mediaUrl,
+    mediaType,
+  }: {
+    mediaUrl: string;
+    mediaType: "image" | "video";
+  },
+  token: string,
+) {
+  const res = await fetch(`${API_BASE}/api/user/capsules/${capsuleId}/media`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ media_url: mediaUrl, media_type: mediaType }),
   });
 
   return parseResponseSafe(res);

@@ -95,6 +95,52 @@ const ensureGroupMember = async (supabase, groupId, userId, role = 'member') => 
   if (error) throw error;
 };
 
+const ensureCapsuleMediaRecord = async (supabase, capsuleId, userId, mediaUrl, mediaType) => {
+  const { error } = await supabase.from('capsule_media').insert([
+    {
+      capsule_id: capsuleId,
+      uploaded_by: userId,
+      media_url: mediaUrl,
+      media_type: mediaType,
+    },
+  ]);
+
+  if (error) throw error;
+};
+
+const uploadToPostMediaBucket = async (file, userId, capsuleId) => {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY in backend env.');
+  }
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const adminSupabase = createClient(process.env.SUPABASE_URL, serviceRoleKey);
+
+  const bucket = process.env.POST_MEDIA_BUCKET || 'profile-images';
+  const safeName = String(file.originalname || 'file').replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const objectPath = `capsules/${capsuleId}/${userId}-${Date.now()}-${safeName}`;
+
+  const { error: uploadError } = await adminSupabase.storage
+    .from(bucket)
+    .upload(objectPath, file.buffer, {
+      contentType: file.mimetype,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { data: publicUrlData } = adminSupabase.storage.from(bucket).getPublicUrl(objectPath);
+  if (!publicUrlData?.publicUrl) {
+    throw new Error('Failed to get public URL');
+  }
+
+  const mediaType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
+  return { url: publicUrlData.publicUrl, mediaType };
+};
+
 const ensureAcceptedFriendship = async (supabase, userId, friendId) => {
   const { data: friendship, error: friendshipError } = await supabase
     .from('friendships')
@@ -787,12 +833,33 @@ const HangoutController = {
         .from(configuredBucket)
         .getPublicUrl(objectPath);
 
+      let capsuleMediaUrl = null;
+      let capsuleMediaType = null;
+
+      const { data: groupChat, error: groupChatError } = await supabase
+        .from('group_chats')
+        .select('hangout_id, is_temporary')
+        .eq('group_id', groupId)
+        .maybeSingle();
+
+      if (groupChatError) throw groupChatError;
+
+      if (groupChat?.is_temporary && groupChat.hangout_id) {
+        const capsuleId = await ensureCapsuleForHangout(supabase, groupChat.hangout_id);
+        const uploadResult = await uploadToPostMediaBucket(req.file, userId, capsuleId);
+        capsuleMediaUrl = uploadResult.url;
+        capsuleMediaType = uploadResult.mediaType;
+        await ensureCapsuleMediaRecord(supabase, capsuleId, userId, capsuleMediaUrl, capsuleMediaType);
+      }
+
       return res.json({
         success: true,
         url: publicUrlData?.publicUrl,
         path: objectPath,
         bucket: configuredBucket,
         contentType: req.file.mimetype,
+        capsule_media_url: capsuleMediaUrl,
+        capsule_media_type: capsuleMediaType,
       });
     } catch (error) {
       return res.status(500).json({ error: error.message });
@@ -913,6 +980,69 @@ const HangoutController = {
 
       if (createReflectionError) throw createReflectionError;
       return res.json({ success: true, data: createdReflection });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'Capsule tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
+  async addCapsuleMedia(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { capsuleId } = req.params;
+    const { media_url, media_type } = req.body;
+
+    if (!media_url || !String(media_url).trim()) {
+      return res.status(400).json({ error: 'media_url is required' });
+    }
+
+    if (!['image', 'video'].includes(media_type)) {
+      return res.status(400).json({ error: "media_type must be 'image' or 'video'" });
+    }
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      const supabase = await createAuthenticatedClient(token);
+
+      const { data: capsule, error: capsuleError } = await supabase
+        .from('capsules')
+        .select('capsule_id, hangout_id')
+        .eq('capsule_id', capsuleId)
+        .single();
+
+      if (capsuleError) throw capsuleError;
+
+      const { data: membership, error: membershipError } = await supabase
+        .from('hangout_participants')
+        .select('hangout_id, status')
+        .eq('hangout_id', capsule.hangout_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (membershipError) throw membershipError;
+      if (!membership) return res.status(403).json({ error: 'You are not part of this hangout capsule' });
+
+      const { data: createdMedia, error: createMediaError } = await supabase
+        .from('capsule_media')
+        .insert([
+          {
+            capsule_id: capsuleId,
+            uploaded_by: userId,
+            media_url: String(media_url).trim(),
+            media_type,
+          },
+        ])
+        .select('media_id, capsule_id, uploaded_by, media_url, media_type, created_at')
+        .single();
+
+      if (createMediaError) throw createMediaError;
+
+      return res.json({ success: true, data: createdMedia });
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Capsule tables are missing. Apply schema.sql to your database.' });

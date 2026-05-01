@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  addCapsuleReflection,
+  addCapsuleMedia,
   getCapsuleDetails,
   getGroupMessages,
   getMyHangouts,
   sendGroupMessage,
   uploadGroupChatMedia,
+  uploadPostMedia,
 } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
@@ -57,7 +57,7 @@ type GroupMessage = {
   text?: string;
   created_at: string;
   payload?: {
-    kind: "text" | "image" | "voice" | "location";
+    kind: "text" | "image" | "video" | "voice" | "location";
     text?: string;
     url?: string;
     latitude?: number;
@@ -70,11 +70,12 @@ type GroupMessage = {
   } | null;
 };
 
-type CapsuleReflection = {
-  reflection_id: string;
-  reflection_text: string;
+type CapsuleMedia = {
+  media_id: string;
+  media_url: string;
+  media_type: "image" | "video" | "audio";
   created_at: string;
-  author: {
+  uploader: {
     full_name?: string;
     username?: string;
   } | null;
@@ -83,7 +84,7 @@ type CapsuleReflection = {
 type CapsuleDetails = {
   capsule_id: string;
   summary: string;
-  reflections: CapsuleReflection[];
+  media?: CapsuleMedia[];
 };
 
 const SocialPage = () => {
@@ -101,19 +102,21 @@ const SocialPage = () => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [capsuleDetails, setCapsuleDetails] = useState<CapsuleDetails | null>(null);
   const [messageDraft, setMessageDraft] = useState("");
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-  const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState<string | null>(null);
+  const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null);
+  const [selectedMediaPreviewUrl, setSelectedMediaPreviewUrl] = useState<string | null>(null);
+  const [capsuleMediaFile, setCapsuleMediaFile] = useState<File | null>(null);
+  const [capsuleMediaPreviewUrl, setCapsuleMediaPreviewUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [sendingLocation, setSendingLocation] = useState(false);
   const [hasUnseenMessages, setHasUnseenMessages] = useState(false);
-  const [reflectionDraft, setReflectionDraft] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [savingReflection, setSavingReflection] = useState(false);
+  const [uploadingCapsuleMedia, setUploadingCapsuleMedia] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recorderStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
   const recordingStartedAtRef = useRef<number | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
+  const capsuleMediaInputRef = useRef<HTMLInputElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
@@ -312,8 +315,8 @@ const SocialPage = () => {
   const handleSendMessage = async () => {
     if (!token || !selectedHangout?.group_chat?.group_id) return;
 
-    if (selectedImageFile) {
-      await handleSendImage();
+    if (selectedMediaFile) {
+      await handleSendMedia();
       return;
     }
 
@@ -342,47 +345,49 @@ const SocialPage = () => {
     }
   };
 
-  const handleChooseImage = () => {
-    imageInputRef.current?.click();
+  const handleChooseMedia = () => {
+    mediaInputRef.current?.click();
   };
 
-  const handleImageSelected = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleMediaSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please select an image file." });
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      toast({ title: "Invalid file", description: "Please select an image or video file." });
       return;
     }
 
-    setSelectedImageFile(file);
-    if (selectedImagePreviewUrl) {
-      URL.revokeObjectURL(selectedImagePreviewUrl);
+    setSelectedMediaFile(file);
+    if (selectedMediaPreviewUrl) {
+      URL.revokeObjectURL(selectedMediaPreviewUrl);
     }
-    setSelectedImagePreviewUrl(URL.createObjectURL(file));
+    setSelectedMediaPreviewUrl(URL.createObjectURL(file));
     event.target.value = "";
   };
 
-  const handleSendImage = async () => {
-    if (!token || !selectedHangout?.group_chat?.group_id || !selectedImageFile) return;
+  const handleSendMedia = async () => {
+    if (!token || !selectedHangout?.group_chat?.group_id || !selectedMediaFile) return;
 
     setSendingMessage(true);
     try {
-      const uploadResult = await uploadGroupChatMedia(selectedHangout.group_chat.group_id, selectedImageFile, token);
+      const uploadResult = await uploadGroupChatMedia(selectedHangout.group_chat.group_id, selectedMediaFile, token);
       if (!uploadResult?.success || !uploadResult?.url) {
         toast({
           title: "Upload failed",
-          description: uploadResult?.error || "Could not upload image.",
+          description: uploadResult?.error || "Could not upload media.",
         });
         return;
       }
+
+      const mediaKind = selectedMediaFile.type.startsWith("video/") ? "video" : "image";
 
       const result = await sendGroupMessage(
         selectedHangout.group_chat.group_id,
         {
           messageType: "text",
           payload: {
-            kind: "image",
+            kind: mediaKind,
             url: uploadResult.url,
           },
         },
@@ -390,17 +395,17 @@ const SocialPage = () => {
       );
 
       if (result?.success) {
-        setSelectedImageFile(null);
-        if (selectedImagePreviewUrl) {
-          URL.revokeObjectURL(selectedImagePreviewUrl);
+        setSelectedMediaFile(null);
+        if (selectedMediaPreviewUrl) {
+          URL.revokeObjectURL(selectedMediaPreviewUrl);
         }
-        setSelectedImagePreviewUrl(null);
+        setSelectedMediaPreviewUrl(null);
         shouldAutoScrollRef.current = true;
         void loadGroupMessages(selectedHangout.group_chat.group_id, token, false);
       } else {
         toast({
           title: "Message failed",
-          description: result?.error || "Could not send image message.",
+          description: result?.error || "Could not send media message.",
         });
       }
     } finally {
@@ -415,15 +420,18 @@ const SocialPage = () => {
 
   useEffect(() => {
     return () => {
-      if (selectedImagePreviewUrl) {
-        URL.revokeObjectURL(selectedImagePreviewUrl);
+      if (selectedMediaPreviewUrl) {
+        URL.revokeObjectURL(selectedMediaPreviewUrl);
+      }
+      if (capsuleMediaPreviewUrl) {
+        URL.revokeObjectURL(capsuleMediaPreviewUrl);
       }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
       }
       stopRecorderStream();
     };
-  }, [selectedImagePreviewUrl]);
+  }, [capsuleMediaPreviewUrl, selectedMediaPreviewUrl]);
 
   const handleToggleVoiceRecording = async () => {
     if (!token || !selectedHangout?.group_chat?.group_id) return;
@@ -546,19 +554,80 @@ const SocialPage = () => {
     );
   };
 
-  const handleSaveReflection = async () => {
-    if (!token || !selectedHangout?.capsule?.capsule_id || !reflectionDraft.trim()) return;
+  const handleChooseCapsuleMedia = () => {
+    capsuleMediaInputRef.current?.click();
+  };
 
-    setSavingReflection(true);
+  const handleCapsuleMediaSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      toast({ title: "Invalid file", description: "Please select an image or video file." });
+      return;
+    }
+
+    setCapsuleMediaFile(file);
+    if (capsuleMediaPreviewUrl) {
+      URL.revokeObjectURL(capsuleMediaPreviewUrl);
+    }
+    setCapsuleMediaPreviewUrl(URL.createObjectURL(file));
+    event.target.value = "";
+  };
+
+  const handleAddCapsuleMedia = async () => {
+    if (!token || !selectedHangout?.capsule?.capsule_id || !capsuleMediaFile) return;
+
+    setUploadingCapsuleMedia(true);
     try {
-      const result = await addCapsuleReflection(selectedHangout.capsule.capsule_id, reflectionDraft.trim(), token);
-      if (result?.success) {
-        setReflectionDraft("");
-        const next = await getCapsuleDetails(selectedHangout.capsule.capsule_id, token);
-        setCapsuleDetails(next?.data || null);
+      const uploadResult = await uploadPostMedia(capsuleMediaFile, token);
+      if (!uploadResult?.url) {
+        toast({
+          title: "Upload failed",
+          description: uploadResult?.error || "Could not upload media.",
+        });
+        return;
+      }
+
+      const mediaType =
+        uploadResult.media_type === "video" || capsuleMediaFile.type.startsWith("video/")
+          ? "video"
+          : "image";
+      const addResult = await addCapsuleMedia(
+        selectedHangout.capsule.capsule_id,
+        { mediaUrl: uploadResult.url, mediaType },
+        token,
+      );
+
+      if (!addResult?.success) {
+        toast({
+          title: "Capsule update failed",
+          description: addResult?.error || "Could not add media to capsule.",
+        });
+        return;
+      }
+
+      const expectedMediaCount = (capsuleDetails?.media?.length ?? 0) + 1;
+      if (addResult?.data) {
+        setCapsuleDetails((prev) => {
+          if (!prev) return prev;
+          const nextMedia = [addResult.data, ...(prev.media || [])];
+          return { ...prev, media: nextMedia };
+        });
+      }
+
+      setCapsuleMediaFile(null);
+      if (capsuleMediaPreviewUrl) {
+        URL.revokeObjectURL(capsuleMediaPreviewUrl);
+      }
+      setCapsuleMediaPreviewUrl(null);
+
+      const next = await getCapsuleDetails(selectedHangout.capsule.capsule_id, token);
+      if (next?.data?.media && next.data.media.length >= expectedMediaCount) {
+        setCapsuleDetails(next.data);
       }
     } finally {
-      setSavingReflection(false);
+      setUploadingCapsuleMedia(false);
     }
   };
 
@@ -720,6 +789,10 @@ const SocialPage = () => {
                                     />
                                   ) : null}
 
+                                  {payload.kind === "video" && payload.url ? (
+                                    <video controls src={payload.url} className="max-h-56 w-full rounded-lg" />
+                                  ) : null}
+
                                   {payload.kind === "voice" && payload.url ? (
                                     <audio controls src={payload.url} className="max-w-full" />
                                   ) : null}
@@ -763,34 +836,44 @@ const SocialPage = () => {
                       )}
                     </div>
 
-                    {selectedImagePreviewUrl && (
+                    {selectedMediaPreviewUrl && (
                       <div className="rounded-xl border border-border/50 p-3 space-y-2">
-                        <img src={selectedImagePreviewUrl} alt="Selected" className="max-h-40 rounded-lg" />
-                        <p className="text-xs text-muted-foreground">Image ready. Press Send to post it.</p>
+                        {selectedMediaFile?.type.startsWith("video/") ? (
+                          <video controls src={selectedMediaPreviewUrl} className="max-h-40 w-full rounded-lg" />
+                        ) : (
+                          <img src={selectedMediaPreviewUrl} alt="Selected" className="max-h-40 rounded-lg" />
+                        )}
+                        <p className="text-xs text-muted-foreground">Media ready. Press Send to post it.</p>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              setSelectedImageFile(null);
-                              if (selectedImagePreviewUrl) {
-                                URL.revokeObjectURL(selectedImagePreviewUrl);
+                              setSelectedMediaFile(null);
+                              if (selectedMediaPreviewUrl) {
+                                URL.revokeObjectURL(selectedMediaPreviewUrl);
                               }
-                              setSelectedImagePreviewUrl(null);
+                              setSelectedMediaPreviewUrl(null);
                             }}
                             disabled={sendingMessage}
                           >
-                            Remove Image
+                            Remove Media
                           </Button>
                         </div>
                       </div>
                     )}
 
-                    <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelected} />
+                    <input
+                      ref={mediaInputRef}
+                      type="file"
+                      accept="image/*,video/*"
+                      className="hidden"
+                      onChange={handleMediaSelected}
+                    />
 
                     <div className="rounded-xl border border-border/60 bg-background p-2">
                       <div className="flex gap-2 mb-2">
-                        <Button type="button" size="icon" variant="soft" onClick={handleChooseImage} title="Send image">
+                        <Button type="button" size="icon" variant="soft" onClick={handleChooseMedia} title="Send media">
                           <ImagePlus className="w-4 h-4" />
                         </Button>
                         <Button
@@ -829,7 +912,7 @@ const SocialPage = () => {
                         />
                         <Button
                           onClick={() => void handleSendMessage()}
-                          disabled={sendingMessage || (!messageDraft.trim() && !selectedImageFile)}
+                          disabled={sendingMessage || (!messageDraft.trim() && !selectedMediaFile)}
                         >
                           {sendingMessage ? "Sending..." : "Send"}
                         </Button>
@@ -863,31 +946,61 @@ const SocialPage = () => {
                           {capsuleDetails.summary || "No summary yet."}
                         </div>
 
-                        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                          {capsuleDetails.reflections?.length ? (
-                            capsuleDetails.reflections.map((reflection) => (
-                              <div key={reflection.reflection_id} className="rounded-lg bg-muted/30 p-3">
-                                <p className="text-xs text-muted-foreground mb-1">
-                                  {reflection.author?.full_name || "Unknown"}
-                                </p>
-                                <p className="text-sm text-foreground whitespace-pre-wrap">{reflection.reflection_text}</p>
-                              </div>
-                            ))
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Capsule Media</p>
+                          {capsuleDetails.media?.length ? (
+                            <div className="grid grid-cols-2 gap-3">
+                              {capsuleDetails.media.map((item) => (
+                                <div key={item.media_id} className="rounded-lg overflow-hidden border border-border/40">
+                                  {item.media_type === "video" ? (
+                                    <video controls src={item.media_url} className="w-full h-40 object-cover" />
+                                  ) : (
+                                    <img src={item.media_url} alt="Capsule media" className="w-full h-40 object-cover" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           ) : (
-                            <p className="text-sm text-muted-foreground">No reflections yet.</p>
+                            <p className="text-sm text-muted-foreground">No media added yet.</p>
                           )}
                         </div>
                       </>
                     )}
 
-                    <Textarea
-                      placeholder="Add your reflection to this capsule..."
-                      value={reflectionDraft}
-                      onChange={(event) => setReflectionDraft(event.target.value)}
-                    />
-                    <Button onClick={() => void handleSaveReflection()} disabled={savingReflection || !reflectionDraft.trim()}>
-                      {savingReflection ? "Saving..." : "Save Reflection"}
-                    </Button>
+                    {selectedHangout?.capsule?.capsule_id && (
+                      <div className="rounded-xl border border-border/50 p-3 space-y-3">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Add Media</p>
+                        {capsuleMediaPreviewUrl && (
+                          <div className="space-y-2">
+                            {capsuleMediaFile?.type.startsWith("video/") ? (
+                              <video controls src={capsuleMediaPreviewUrl} className="max-h-44 w-full rounded-lg" />
+                            ) : (
+                              <img src={capsuleMediaPreviewUrl} alt="Selected" className="max-h-44 rounded-lg" />
+                            )}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <input
+                            ref={capsuleMediaInputRef}
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={handleCapsuleMediaSelected}
+                          />
+                          <Button type="button" variant="outline" onClick={handleChooseCapsuleMedia}>
+                            Choose Media
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => void handleAddCapsuleMedia()}
+                            disabled={uploadingCapsuleMedia || !capsuleMediaFile}
+                          >
+                            {uploadingCapsuleMedia ? "Uploading..." : "Add to Capsule"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                   </>
                 )}
               </CardContent>

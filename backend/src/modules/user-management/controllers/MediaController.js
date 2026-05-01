@@ -84,7 +84,8 @@ const MediaController = {
       const sanitizedName = String(req.file.originalname || "upload")
         .replaceAll("..", "")
         .replaceAll("/", "-")
-        .replaceAll("\\", "-");
+        .replaceAll("\\", "-")
+        .replace(/[^a-zA-Z0-9_.-]/g, "_");
 
       const objectPath = `posts/${userId}/${Date.now()}-${sanitizedName}`;
 

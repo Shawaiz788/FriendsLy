@@ -1030,6 +1030,293 @@ const UserController = {
       console.log('💥 Exception in getIncomingFriendRequests:', err);
       res.status(500).json({ error: err.message });
     }
+  },
+
+  async getTrustedContacts(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { data: contacts, error } = await authenticatedSupabase
+        .from('trusted_contacts')
+        .select(`
+          contact_id,
+          contact_user_id,
+          created_at
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) return res.status(400).json({ error: error.message });
+
+      // Fetch user profiles for each contact
+      const contactUserIds = (contacts || []).map(c => c.contact_user_id);
+      
+      if (contactUserIds.length === 0) {
+        return res.json({ data: [] });
+      }
+
+      const { data: profiles, error: profilesError } = await authenticatedSupabase
+        .from('user_profiles')
+        .select('user_id, full_name, username, profile_photo_url')
+        .in('user_id', contactUserIds);
+
+      if (profilesError) return res.status(400).json({ error: profilesError.message });
+
+      const profileMap = (profiles || []).reduce((acc, profile) => {
+        acc[profile.user_id] = profile;
+        return acc;
+      }, {});
+
+      const formattedContacts = (contacts || []).map(contact => ({
+        contact_id: contact.contact_id,
+        contact_user_id: contact.contact_user_id,
+        created_at: contact.created_at,
+        contact_profile: profileMap[contact.contact_user_id] || null
+      }));
+
+      res.json({ data: formattedContacts });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+
+  async addTrustedContact(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { contact_user_id } = req.body;
+
+    if (!contact_user_id) {
+      return res.status(400).json({ error: 'contact_user_id is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    if (userId === contact_user_id) {
+      return res.status(400).json({ error: 'Cannot add yourself as a trusted contact' });
+    }
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+
+      // Check if contact already exists
+      const { data: existingContact } = await authenticatedSupabase
+        .from('trusted_contacts')
+        .select('contact_id')
+        .eq('user_id', userId)
+        .eq('contact_user_id', contact_user_id)
+        .maybeSingle();
+
+      if (existingContact) {
+        return res.status(400).json({ error: 'This contact is already in your trusted contacts' });
+      }
+
+      // Add trusted contact
+      const { data, error } = await authenticatedSupabase
+        .from('trusted_contacts')
+        .insert([{
+          user_id: userId,
+          contact_user_id
+        }])
+        .select();
+
+      if (error) return res.status(400).json({ error: error.message });
+
+      res.status(201).json({ success: true, data: data[0] });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+
+  async removeTrustedContact(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { contact_user_id } = req.body;
+
+    if (!contact_user_id) {
+      return res.status(400).json({ error: 'contact_user_id is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      
+      const { error } = await authenticatedSupabase
+        .from('trusted_contacts')
+        .delete()
+        .eq('user_id', userId)
+        .eq('contact_user_id', contact_user_id);
+
+      if (error) return res.status(400).json({ error: error.message });
+
+      res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+
+  async getBlockedUsers(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { data: blocks, error } = await authenticatedSupabase
+        .from('blocks')
+        .select('blocked_id')
+        .eq('blocker_id', userId);
+
+      if (error) return res.status(400).json({ error: error.message });
+
+      const blockedIds = (blocks || []).map((entry) => entry.blocked_id);
+      if (blockedIds.length === 0) return res.json({ data: [] });
+
+      const { data: profiles, error: profilesError } = await authenticatedSupabase
+        .from('user_profiles')
+        .select('user_id, full_name, username, profile_photo_url')
+        .in('user_id', blockedIds);
+
+      if (profilesError) return res.status(400).json({ error: profilesError.message });
+
+      const profileMap = (profiles || []).reduce((acc, profile) => {
+        acc[profile.user_id] = profile;
+        return acc;
+      }, {});
+
+      const blockedUsers = blockedIds.map((blockedId) => ({
+        blocked_user_id: blockedId,
+        blocked_profile: profileMap[blockedId] || null,
+      }));
+
+      res.json({ data: blockedUsers });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+
+  async blockUser(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { blocked_user_id } = req.body;
+
+    if (!blocked_user_id) {
+      return res.status(400).json({ error: 'blocked_user_id is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = userData.user.id;
+
+    if (userId === blocked_user_id) {
+      return res.status(400).json({ error: 'You cannot block yourself' });
+    }
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { data: existingBlock, error: existingError } = await authenticatedSupabase
+        .from('blocks')
+        .select('blocked_id')
+        .eq('blocker_id', userId)
+        .eq('blocked_id', blocked_user_id)
+        .maybeSingle();
+
+      if (existingError) return res.status(400).json({ error: existingError.message });
+      if (existingBlock) return res.status(400).json({ error: 'User is already blocked' });
+
+      const { error } = await authenticatedSupabase.from('blocks').insert([
+        {
+          blocker_id: userId,
+          blocked_id: blocked_user_id,
+        },
+      ]);
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(201).json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+
+  async unblockUser(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { blocked_user_id } = req.body;
+
+    if (!blocked_user_id) {
+      return res.status(400).json({ error: 'blocked_user_id is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { error } = await authenticatedSupabase
+        .from('blocks')
+        .delete()
+        .eq('blocker_id', userId)
+        .eq('blocked_id', blocked_user_id);
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+
+  async reportUser(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { reported_user_id, reason } = req.body;
+
+    if (!reported_user_id) {
+      return res.status(400).json({ error: 'reported_user_id is required' });
+    }
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({ error: 'A reason is required to file a report' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = userData.user.id;
+
+    if (userId === reported_user_id) {
+      return res.status(400).json({ error: 'You cannot report yourself' });
+    }
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { error } = await authenticatedSupabase.from('reports').insert([
+        {
+          reporter_id: userId,
+          reported_user_id,
+          reason: reason.trim(),
+        },
+      ]);
+
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(201).json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
 };
 

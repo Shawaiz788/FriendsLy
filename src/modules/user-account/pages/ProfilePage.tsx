@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, Download, LogOut, Shield, ShieldAlert, Trash2, User, UserX } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -84,6 +85,28 @@ const ProfilePage = () => {
     chats: false,
     posts: true,
   });
+  const [trustedContactsOpen, setTrustedContactsOpen] = useState(false);
+  const [trustedContacts, setTrustedContacts] = useState<any[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [contactsError, setContactsError] = useState("");
+  const [searchUserQuery, setSearchUserQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [addingContact, setAddingContact] = useState<string | null>(null);
+
+  const [blockReportOpen, setBlockReportOpen] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  const [blockedLoading, setBlockedLoading] = useState(false);
+  const [blockReportError, setBlockReportError] = useState("");
+  const [blockReportMessage, setBlockReportMessage] = useState("");
+  const [blockSearchQuery, setBlockSearchQuery] = useState("");
+  const [blockSearchResults, setBlockSearchResults] = useState<any[]>([]);
+  const [searchingBlockUsers, setSearchingBlockUsers] = useState(false);
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
+  const [unblockingUserId, setUnblockingUserId] = useState<string | null>(null);
+  const [reportingUser, setReportingUser] = useState<any | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reporting, setReporting] = useState(false);
 
   const LIGHT_THEMES = ["sage-coral", "sandy"] as const;
   const DARK_THEME = "muted-night" as const;
@@ -308,6 +331,228 @@ const ProfilePage = () => {
       });
     }
   }, [editSuccess, token]);
+
+  useEffect(() => {
+    if (trustedContactsOpen && token) {
+      loadTrustedContacts();
+    }
+  }, [trustedContactsOpen, token]);
+
+  useEffect(() => {
+    if (blockReportOpen && token) {
+      loadBlockedUsers();
+      setBlockReportError("");
+      setBlockReportMessage("");
+    }
+  }, [blockReportOpen, token]);
+
+  async function loadTrustedContacts() {
+    setLoadingContacts(true);
+    setContactsError("");
+    try {
+      const { getTrustedContacts } = await import("@/lib/api");
+      const result = await getTrustedContacts(token);
+      if (result?.data) {
+        setTrustedContacts(result.data);
+      } else {
+        setContactsError(result?.error || "Failed to load trusted contacts");
+      }
+    } catch (err) {
+      setContactsError(err instanceof Error ? err.message : "Error loading contacts");
+    } finally {
+      setLoadingContacts(false);
+    }
+  }
+
+  async function loadBlockedUsers() {
+    setBlockedLoading(true);
+    setBlockReportError("");
+    try {
+      const { getBlockedUsers } = await import("@/lib/api");
+      const result = await getBlockedUsers(token);
+      if (result?.data) {
+        setBlockedUsers(result.data);
+      } else {
+        setBlockReportError(result?.error || "Failed to load blocked users");
+      }
+    } catch (err) {
+      setBlockReportError(err instanceof Error ? err.message : "Error loading blocked users");
+    } finally {
+      setBlockedLoading(false);
+    }
+  }
+
+  async function handleSearchUsers(query: string) {
+    setSearchUserQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      setContactsError("");
+      return;
+    }
+
+    setSearchingUsers(true);
+    setContactsError("");
+    try {
+      const { searchUsers } = await import("@/lib/api");
+      const result = await searchUsers(query, token);
+      if (result?.data) {
+        // Filter out users who are already trusted contacts
+        const trustedIds = trustedContacts.map(c => c.contact_user_id);
+        const filtered = result.data.filter((user: any) => !trustedIds.includes(user.user_id));
+        setSearchResults(filtered);
+      } else if (result?.error) {
+        setContactsError(result.error);
+        setSearchResults([]);
+      }
+    } catch (err) {
+      console.error("Search error:", err);
+      setContactsError(err instanceof Error ? err.message : "Error searching users");
+      setSearchResults([]);
+    } finally {
+      setSearchingUsers(false);
+    }
+  }
+
+  async function handleSearchBlockUsers(query: string) {
+    setBlockSearchQuery(query);
+    if (!query.trim()) {
+      setBlockSearchResults([]);
+      setBlockReportError("");
+      return;
+    }
+
+    setSearchingBlockUsers(true);
+    setBlockReportError("");
+    try {
+      const { searchUsers } = await import("@/lib/api");
+      const result = await searchUsers(query, token);
+      if (result?.data) {
+        const filtered = (result.data as any[])
+          .filter((user) => user.user_id !== userId)
+          .filter((user) => !blockedUsers.some((blocked) => blocked.blocked_user_id === user.user_id));
+        setBlockSearchResults(filtered);
+      } else if (result?.error) {
+        setBlockReportError(result.error);
+        setBlockSearchResults([]);
+      }
+    } catch (err) {
+      console.error("Block search error:", err);
+      setBlockReportError(err instanceof Error ? err.message : "Error searching users");
+      setBlockSearchResults([]);
+    } finally {
+      setSearchingBlockUsers(false);
+    }
+  }
+
+  async function handleBlockUser(targetUserId: string) {
+    setBlockingUserId(targetUserId);
+    setBlockReportError("");
+    setBlockReportMessage("");
+    try {
+      const { blockUser } = await import("@/lib/api");
+      const result = await blockUser(targetUserId, token);
+      if (result?.success) {
+        setBlockReportMessage("User blocked successfully.");
+        setBlockSearchResults((prev) => prev.filter((user) => user.user_id !== targetUserId));
+        await loadBlockedUsers();
+      } else {
+        setBlockReportError(result?.error || "Failed to block user");
+      }
+    } catch (err) {
+      setBlockReportError(err instanceof Error ? err.message : "Error blocking user");
+    } finally {
+      setBlockingUserId(null);
+    }
+  }
+
+  async function handleUnblockUser(targetUserId: string) {
+    setUnblockingUserId(targetUserId);
+    setBlockReportError("");
+    setBlockReportMessage("");
+    try {
+      const { unblockUser } = await import("@/lib/api");
+      const result = await unblockUser(targetUserId, token);
+      if (result?.success) {
+        setBlockReportMessage("User unblocked successfully.");
+        await loadBlockedUsers();
+      } else {
+        setBlockReportError(result?.error || "Failed to unblock user");
+      }
+    } catch (err) {
+      setBlockReportError(err instanceof Error ? err.message : "Error unblocking user");
+    } finally {
+      setUnblockingUserId(null);
+    }
+  }
+
+  function handleStartReport(user: any) {
+    setReportingUser(user);
+    setReportReason("");
+    setBlockReportError("");
+    setBlockReportMessage("");
+  }
+
+  async function handleSubmitReport() {
+    if (!reportingUser) return;
+    if (!reportReason.trim()) {
+      setBlockReportError("Please enter a reason for the report.");
+      return;
+    }
+
+    setReporting(true);
+    setBlockReportError("");
+    setBlockReportMessage("");
+
+    try {
+      const { reportUser } = await import("@/lib/api");
+      const result = await reportUser(reportingUser.user_id, reportReason, token);
+      if (result?.success) {
+        setBlockReportMessage("Report submitted successfully.");
+        setReportingUser(null);
+        setReportReason("");
+      } else {
+        setBlockReportError(result?.error || "Failed to submit report");
+      }
+    } catch (err) {
+      setBlockReportError(err instanceof Error ? err.message : "Error submitting report");
+    } finally {
+      setReporting(false);
+    }
+  }
+
+  async function handleAddTrustedContact(userId: string) {
+    setAddingContact(userId);
+    try {
+      const { addTrustedContact } = await import("@/lib/api");
+      const result = await addTrustedContact(userId, token);
+      if (result?.success) {
+        setContactsError("");
+        await loadTrustedContacts();
+        setSearchUserQuery("");
+        setSearchResults([]);
+      } else {
+        setContactsError(result?.error || "Failed to add contact");
+      }
+    } catch (err) {
+      setContactsError(err instanceof Error ? err.message : "Error adding contact");
+    } finally {
+      setAddingContact(null);
+    }
+  }
+
+  async function handleRemoveTrustedContact(userId: string) {
+    try {
+      const { removeTrustedContact } = await import("@/lib/api");
+      const result = await removeTrustedContact(userId, token);
+      if (result?.success) {
+        await loadTrustedContacts();
+      } else {
+        setContactsError(result?.error || "Failed to remove contact");
+      }
+    } catch (err) {
+      setContactsError(err instanceof Error ? err.message : "Error removing contact");
+    }
+  }
 
   async function handleEditProfile(e) {
     e.preventDefault();
@@ -568,11 +813,11 @@ const ProfilePage = () => {
               </Select>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Trusted emergency contacts</span>
-                <Button variant="outline" size="sm">Manage</Button>
+                <Button variant="outline" size="sm" onClick={() => setTrustedContactsOpen(true)}>Manage</Button>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Block and report</span>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => setBlockReportOpen(true)}>
                   <ShieldAlert className="w-4 h-4" /> Open
                 </Button>
               </div>
@@ -764,6 +1009,244 @@ const ProfilePage = () => {
             </Button>
             <Button variant="hero" type="button" onClick={handleDownloadData} disabled={isDownloading}>
               {isDownloading ? "Preparing…" : "Download"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={trustedContactsOpen} onOpenChange={setTrustedContactsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Trusted Emergency Contacts</DialogTitle>
+            <DialogDescription>
+              Add friends who can access your location in emergencies
+            </DialogDescription>
+          </DialogHeader>
+
+          {contactsError && (
+            <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">
+              {contactsError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {/* Search and Add Section */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Add Contact</label>
+              <Input
+                placeholder="Search friends by name or username"
+                value={searchUserQuery}
+                onChange={(e) => handleSearchUsers(e.target.value)}
+                className="h-10"
+              />
+              
+              {searchingUsers && <div className="text-xs text-muted-foreground">Searching...</div>}
+              
+              {searchResults.length > 0 && (
+                <div className="max-h-48 overflow-y-auto space-y-2 border rounded-lg p-2 bg-muted/30">
+                  {searchResults.map((user) => (
+                    <div key={user.user_id} className="flex items-center justify-between gap-2 p-2 bg-card rounded border">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{user.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="hero"
+                        onClick={() => handleAddTrustedContact(user.user_id)}
+                        disabled={addingContact === user.user_id}
+                        className="shrink-0"
+                      >
+                        {addingContact === user.user_id ? "..." : "Add"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!searchingUsers && searchUserQuery && searchResults.length === 0 && (
+                <p className="text-xs text-muted-foreground">No matching friends found</p>
+              )}
+            </div>
+
+            {/* Current Contacts List */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Your Trusted Contacts ({trustedContacts.length})</label>
+              
+              {loadingContacts && <div className="text-xs text-muted-foreground">Loading...</div>}
+              
+              {trustedContacts.length === 0 && !loadingContacts && (
+                <p className="text-xs text-muted-foreground py-4 text-center">No trusted contacts yet</p>
+              )}
+              
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {trustedContacts.map((contact) => (
+                  <div
+                    key={contact.contact_id}
+                    className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg border"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {contact.contact_profile?.full_name || "Unknown"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        @{contact.contact_profile?.username || "unknown"}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleRemoveTrustedContact(contact.contact_user_id)}
+                      className="shrink-0 text-destructive hover:text-destructive"
+                    >
+                      <UserX className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTrustedContactsOpen(false)}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={blockReportOpen} onOpenChange={setBlockReportOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Block and report</DialogTitle>
+            <DialogDescription>
+              Search for a user to block or submit a report. You can also manage currently blocked users here.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {(blockReportError || blockReportMessage) && (
+              <div className={`rounded-xl p-3 ${blockReportError ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}>
+                {blockReportError || blockReportMessage}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Search users to block/report</label>
+              <Input
+                placeholder="Search by name or username"
+                value={blockSearchQuery}
+                onChange={(e) => handleSearchBlockUsers(e.target.value)}
+                className="h-10"
+              />
+              {searchingBlockUsers && <p className="text-xs text-muted-foreground">Searching...</p>}
+              {blockSearchResults.length > 0 ? (
+                <div className="space-y-2 max-h-80 overflow-y-auto rounded-xl border border-border/50 bg-background p-2">
+                  {blockSearchResults.map((user) => (
+                    <div key={user.user_id} className="flex flex-col gap-3 p-3 rounded-xl border border-border/50 bg-muted/10">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{user.full_name || 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">@{user.username}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleBlockUser(user.user_id)}
+                            disabled={blockingUserId === user.user_id}
+                          >
+                            {blockingUserId === user.user_id ? 'Blocking…' : 'Block'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="hero"
+                            onClick={() => handleStartReport(user)}
+                          >
+                            Report
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{user.bio || 'No profile summary available.'}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                blockSearchQuery.trim() && !searchingBlockUsers && (
+                  <p className="text-xs text-muted-foreground">No users found.</p>
+                )
+              )}
+            </div>
+
+            {reportingUser && (
+              <div className="space-y-3 rounded-xl border border-border/50 bg-muted/10 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">Reporting {reportingUser.full_name || '@' + reportingUser.username}</p>
+                    <p className="text-xs text-muted-foreground">This report will be sent to moderators for review.</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setReportingUser(null)}>
+                    Cancel
+                  </Button>
+                </div>
+
+                <Textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="Describe the issue or behavior that violated community guidelines"
+                  className="min-h-[120px]"
+                />
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setReportingUser(null)}>
+                    Cancel
+                  </Button>
+                  <Button variant="hero" size="sm" onClick={handleSubmitReport} disabled={reporting}>
+                    {reporting ? 'Submitting…' : 'Submit report'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Blocked users</p>
+                {blockedLoading && <span className="text-xs text-muted-foreground">Refreshing…</span>}
+              </div>
+              {blockedUsers.length === 0 && !blockedLoading ? (
+                <p className="text-xs text-muted-foreground">You have not blocked anyone yet.</p>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto rounded-xl border border-border/50 bg-background p-2">
+                  {blockedUsers.map((entry) => {
+                    const blockedProfile = entry.blocked_profile || {};
+                    return (
+                      <div key={entry.blocked_user_id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/10 p-3">
+                        <div>
+                          <p className="font-medium">{blockedProfile.full_name || 'Unknown user'}</p>
+                          <p className="text-xs text-muted-foreground">@{blockedProfile.username || 'unknown'}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleUnblockUser(entry.blocked_user_id)}
+                          disabled={unblockingUserId === entry.blocked_user_id}
+                        >
+                          {unblockingUserId === entry.blocked_user_id ? 'Unblocking…' : 'Unblock'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockReportOpen(false)}>
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

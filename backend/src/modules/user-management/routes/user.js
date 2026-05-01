@@ -51,6 +51,7 @@ router.get('/hangouts/mine', requireAuth, HangoutController.getMyHangouts);
 router.post('/chats/direct', requireAuth, HangoutController.getOrCreateDirectChat);
 router.get('/groups/:groupId/messages', requireAuth, HangoutController.getGroupMessages);
 router.post('/groups/:groupId/messages', requireAuth, HangoutController.sendGroupMessage);
+router.post('/groups/:groupId/polls/:pollId/vote', requireAuth, HangoutController.voteInPoll);
 router.post('/groups/:groupId/media', requireAuth, upload.single('file'), HangoutController.uploadGroupMedia);
 
 // Media (feed/posts)
@@ -70,6 +71,18 @@ router.get('/:userId/friend-status', requireAuth, UserController.getFriendReques
 router.post('/friend-request/send', requireAuth, UserController.sendFriendRequest);
 router.post('/friend-request/accept', requireAuth, UserController.acceptFriendRequest);
 router.post('/friend-request/reject', requireAuth, UserController.rejectFriendRequest);
+
+// Trusted contacts
+router.get('/trusted-contacts', requireAuth, UserController.getTrustedContacts);
+router.post('/trusted-contacts/add', requireAuth, UserController.addTrustedContact);
+router.post('/trusted-contacts/remove', requireAuth, UserController.removeTrustedContact);
+
+// Block / report
+router.get('/blocks', requireAuth, UserController.getBlockedUsers);
+router.post('/blocks', requireAuth, UserController.blockUser);
+router.delete('/blocks', requireAuth, UserController.unblockUser);
+router.post('/reports', requireAuth, UserController.reportUser);
+
 // Session timeout handled via middleware
 
 export default router;

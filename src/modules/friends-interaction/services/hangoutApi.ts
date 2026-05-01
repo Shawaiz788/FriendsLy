@@ -100,14 +100,34 @@ export async function getGroupMessages(groupId: string, token: string) {
   return parseResponseSafe(res);
 }
 
-type ChatMessagePayload = {
-  kind: "text" | "image" | "video" | "voice" | "location";
-  text?: string;
-  url?: string;
-  latitude?: number;
-  longitude?: number;
-  duration_ms?: number;
-};
+type ChatMessagePayload =
+  | {
+      kind: "text";
+      text?: string;
+    }
+  | {
+      kind: "image";
+      url?: string;
+    }
+  | {
+      kind: "video";
+      url?: string;
+    }
+  | {
+      kind: "voice";
+      url?: string;
+      duration_ms?: number;
+    }
+  | {
+      kind: "location";
+      latitude?: number;
+      longitude?: number;
+    }
+  | {
+      kind: "poll";
+      question?: string;
+      options?: Array<string | { option_text?: string; text?: string }>;
+    };
 
 export async function sendGroupMessage(
   groupId: string,
@@ -129,6 +149,28 @@ export async function sendGroupMessage(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ text, message_type: messageType, payload }),
+  });
+
+  return parseResponseSafe(res);
+}
+
+export async function voteInPoll(
+  groupId: string,
+  pollId: string,
+  optionId: string,
+  token: string,
+) {
+  if (!pollId) {
+    return { success: false, error: 'Poll identifier is missing' };
+  }
+
+  const res = await fetch(`${API_BASE}/api/user/groups/${groupId}/polls/${pollId}/vote`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ option_id: optionId }),
   });
 
   return parseResponseSafe(res);

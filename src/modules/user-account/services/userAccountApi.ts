@@ -2,6 +2,21 @@
 
 const API_BASE = "http://localhost:3001";
 
+async function parseResponse(res: Response) {
+  const text = await res.text();
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      return { error: 'Invalid JSON response', status: res.status, body: text };
+    }
+  }
+
+  // Non-JSON response (likely HTML) — return helpful error info
+  return { error: 'Unexpected response from server', status: res.status, body: text };
+}
+
 export async function checkUsernameAvailability(username: string) {
   const res = await fetch(`${API_BASE}/check-username?username=${encodeURIComponent(username)}`);
   return res.json();
@@ -86,4 +101,78 @@ export async function getUserProfile(userId: string, token: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
   return res.json();
+}
+
+export async function getTrustedContacts(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/trusted-contacts`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseResponse(res);
+}
+
+export async function addTrustedContact(contactUserId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/trusted-contacts/add`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ contact_user_id: contactUserId }),
+  });
+  return parseResponse(res);
+}
+
+export async function removeTrustedContact(contactUserId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/trusted-contacts/remove`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ contact_user_id: contactUserId }),
+  });
+  return parseResponse(res);
+}
+
+export async function getBlockedUsers(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/blocks`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseResponse(res);
+}
+
+export async function blockUser(blockedUserId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/blocks`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ blocked_user_id: blockedUserId }),
+  });
+  return parseResponse(res);
+}
+
+export async function unblockUser(blockedUserId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/blocks`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ blocked_user_id: blockedUserId }),
+  });
+  return parseResponse(res);
+}
+
+export async function reportUser(reportedUserId: string, reason: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/reports`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ reported_user_id: reportedUserId, reason }),
+  });
+  return parseResponse(res);
 }

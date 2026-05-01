@@ -734,7 +734,7 @@ const HangoutController = {
       }
       const senderByUserId = Object.fromEntries((senderProfiles || []).map((row) => [row.user_id, row]));
 
-      const data = (messages || []).map((message) => {
+      const parsedMessages = (messages || []).map((message) => {
         const payload = parseMessagePayload(message.encrypted_payload);
         return {
           ...message,
@@ -744,7 +744,64 @@ const HangoutController = {
         };
       });
 
-      return res.json({ data });
+      const pollMessagePayloads = parsedMessages.filter(
+        (message) => message.message_type === 'poll' && message.payload?.kind === 'poll' && message.payload.poll_id,
+      );
+      const pollIds = Array.from(new Set(pollMessagePayloads.map((message) => message.payload.poll_id)));
+
+      if (pollIds.length) {
+        const { data: pollOptions, error: pollOptionsError } = await supabase
+          .from('poll_options')
+          .select('option_id, option_text, poll_id')
+          .in('poll_id', pollIds);
+
+        if (pollOptionsError) throw pollOptionsError;
+
+        const { data: pollVotes, error: pollVotesError } = await supabase
+          .from('poll_votes')
+          .select('poll_id, option_id, user_id')
+          .in('poll_id', pollIds);
+
+        if (pollVotesError) throw pollVotesError;
+
+        const voteCountByOption = {};
+        const userVoteByPoll = {};
+
+        for (const vote of pollVotes || []) {
+          voteCountByOption[vote.option_id] = (voteCountByOption[vote.option_id] || 0) + 1;
+          if (vote.user_id === userId) {
+            userVoteByPoll[vote.poll_id] = vote.option_id;
+          }
+        }
+
+        const optionsByPoll = (pollOptions || []).reduce((acc, option) => {
+          acc[option.poll_id] = acc[option.poll_id] || [];
+          acc[option.poll_id].push({
+            option_id: option.option_id,
+            option_text: option.option_text,
+            votes: voteCountByOption[option.option_id] || 0,
+          });
+          return acc;
+        }, {});
+
+        const data = parsedMessages.map((message) => {
+          if (message.message_type === 'poll' && message.payload?.kind === 'poll' && message.payload.poll_id) {
+            return {
+              ...message,
+              payload: {
+                ...message.payload,
+                options: optionsByPoll[message.payload.poll_id] || message.payload.options || [],
+                user_vote_option_id: userVoteByPoll[message.payload.poll_id] || null,
+              },
+            };
+          }
+          return message;
+        });
+
+        return res.json({ data });
+      }
+
+      return res.json({ data: parsedMessages });
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Messaging tables are missing. Apply schema.sql to your database.' });
@@ -805,6 +862,63 @@ const HangoutController = {
         return res.status(400).json({ error: 'Location message requires latitude and longitude' });
       }
 
+      if (normalizedMessageType === 'poll') {
+        if (normalizedPayload.kind !== 'poll') {
+          return res.status(400).json({ error: "Poll messages require payload.kind='poll'" });
+        }
+
+        const question = String(normalizedPayload.question || '').trim();
+        const rawOptions = Array.isArray(normalizedPayload.options) ? normalizedPayload.options : [];
+        const optionTexts = rawOptions
+          .map((option) => {
+            if (!option) return '';
+            if (typeof option === 'string') return String(option).trim();
+            return String(option.option_text || option.text || '').trim();
+          })
+          .filter((optionText) => optionText);
+
+        if (!question) {
+          return res.status(400).json({ error: 'Poll question is required' });
+        }
+
+        if (optionTexts.length < 2) {
+          return res.status(400).json({ error: 'Poll requires at least 2 options' });
+        }
+
+        if (optionTexts.length > 8) {
+          return res.status(400).json({ error: 'Poll supports up to 8 options' });
+        }
+
+        const { data: pollRow, error: pollCreateError } = await supabase
+          .from('polls')
+          .insert([{ group_id: groupId, question, created_by: userId }])
+          .select('poll_id')
+          .single();
+
+        if (pollCreateError) throw pollCreateError;
+
+        const pollId = pollRow.poll_id;
+        const pollOptionsPayload = optionTexts.map((optionText) => ({ poll_id: pollId, option_text: optionText }));
+
+        const { data: createdOptions, error: pollOptionsError } = await supabase
+          .from('poll_options')
+          .insert(pollOptionsPayload)
+          .select('option_id, option_text');
+
+        if (pollOptionsError) throw pollOptionsError;
+
+        normalizedPayload = {
+          kind: 'poll',
+          poll_id: pollId,
+          question,
+          options: (createdOptions || []).map((createdOption) => ({
+            option_id: createdOption.option_id,
+            option_text: createdOption.option_text,
+            votes: 0,
+          })),
+        };
+      }
+
       const payloadString = JSON.stringify(normalizedPayload);
 
       const { data: createdMessage, error: createMessageError } = await supabase
@@ -834,6 +948,84 @@ const HangoutController = {
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Messaging tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
+  async voteInPoll(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { groupId, pollId } = req.params;
+    const { option_id } = req.body;
+
+    if (!option_id) {
+      return res.status(400).json({ error: 'option_id is required' });
+    }
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      const supabase = await createAuthenticatedClient(token);
+
+      const hasAccess = await ensureGroupMembership(supabase, groupId, userId);
+      if (!hasAccess) return res.status(403).json({ error: 'You are not a member of this group chat' });
+
+      const { data: poll, error: pollError } = await supabase
+        .from('polls')
+        .select('poll_id, group_id')
+        .eq('poll_id', pollId)
+        .single();
+
+      if (pollError || !poll) {
+        return res.status(404).json({ error: 'Poll not found' });
+      }
+
+      if (poll.group_id !== groupId) {
+        return res.status(400).json({ error: 'Poll does not belong to this group' });
+      }
+
+      const { data: optionRow, error: optionError } = await supabase
+        .from('poll_options')
+        .select('option_id')
+        .eq('option_id', option_id)
+        .eq('poll_id', pollId)
+        .single();
+
+      if (optionError || !optionRow) {
+        return res.status(400).json({ error: 'Invalid poll option' });
+      }
+
+      const { error: voteError } = await supabase.from('poll_votes').upsert(
+        [{ poll_id: pollId, option_id, user_id: userId }],
+        { onConflict: 'poll_id,user_id' },
+      );
+
+      if (voteError) throw voteError;
+
+      const { data: pollVotes, error: pollVotesError } = await supabase
+        .from('poll_votes')
+        .select('option_id, user_id')
+        .eq('poll_id', pollId);
+
+      if (pollVotesError) throw pollVotesError;
+
+      const voteCounts = (pollVotes || []).reduce((acc, vote) => {
+        acc[vote.option_id] = (acc[vote.option_id] || 0) + 1;
+        return acc;
+      }, {});
+
+      return res.json({
+        success: true,
+        poll_id: pollId,
+        selected_option_id: option_id,
+        counts: voteCounts,
+      });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'Poll tables are missing. Apply schema.sql to your database.' });
       }
       return res.status(500).json({ error: error.message });
     }

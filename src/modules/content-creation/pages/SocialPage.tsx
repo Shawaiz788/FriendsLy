@@ -1,7 +1,7 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createClient, type RealtimeChannel } from "@supabase/supabase-js";
-import { ArrowDown, ImagePlus, MapPin, Mic, MicOff, Trash2 } from "lucide-react";
+import { ArrowDown, ImagePlus, MapPin, Mic, MicOff, PlusCircle, Trash2 } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   sendGroupMessage,
   uploadGroupChatMedia,
   uploadPostMedia,
+  voteInPoll,
 } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
@@ -53,20 +54,48 @@ type HangoutCard = {
   participants: HangoutParticipant[];
 };
 
+type PollOptionPayload = {
+  option_id: string;
+  option_text: string;
+  votes?: number;
+};
+
 type GroupMessage = {
   message_id: string;
   sender_id: string;
   message_type: "text" | "voice" | "poll";
   text?: string;
   created_at: string;
-  payload?: {
-    kind: "text" | "image" | "video" | "voice" | "location";
-    text?: string;
-    url?: string;
-    latitude?: number;
-    longitude?: number;
-    duration_ms?: number;
-  };
+  payload?:
+    | {
+        kind: "text";
+        text?: string;
+      }
+    | {
+        kind: "image";
+        url?: string;
+      }
+    | {
+        kind: "video";
+        url?: string;
+      }
+    | {
+        kind: "voice";
+        url?: string;
+        duration_ms?: number;
+      }
+    | {
+        kind: "location";
+        latitude?: number;
+        longitude?: number;
+      }
+    | {
+        kind: "poll";
+        poll_id?: string;
+        question?: string;
+        options?: PollOptionPayload[];
+        user_vote_option_id?: string | null;
+      };
   sender_profile: {
     full_name?: string;
     username?: string;
@@ -113,6 +142,10 @@ const SocialPage = () => {
   const [sendingLocation, setSendingLocation] = useState(false);
   const [hasUnseenMessages, setHasUnseenMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [sendingPoll, setSendingPoll] = useState(false);
   const [uploadingCapsuleMedia, setUploadingCapsuleMedia] = useState(false);
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
   const [activeCapsuleMedia, setActiveCapsuleMedia] = useState<CapsuleMedia | null>(null);
@@ -353,6 +386,84 @@ const SocialPage = () => {
 
   const handleChooseMedia = () => {
     mediaInputRef.current?.click();
+  };
+
+  const handleAddPollOption = () => {
+    setPollOptions((prevOptions) => [...prevOptions, ""]);
+  };
+
+  const handleRemovePollOption = (index: number) => {
+    setPollOptions((prevOptions) => prevOptions.filter((_, optionIndex) => optionIndex !== index));
+  };
+
+  const resetPollComposer = () => {
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setPollComposerOpen(false);
+  };
+
+  const handleSendPoll = async () => {
+    if (!token || !selectedHangout?.group_chat?.group_id) return;
+    const question = pollQuestion.trim();
+    const options = pollOptions.map((option) => option.trim()).filter(Boolean);
+
+    if (!question) {
+      toast({ title: "Poll required", description: "Please enter a poll question." });
+      return;
+    }
+    if (options.length < 2) {
+      toast({ title: "At least two options", description: "Add at least two poll options." });
+      return;
+    }
+    if (options.length > 8) {
+      toast({ title: "Too many options", description: "Poll supports up to 8 options." });
+      return;
+    }
+
+    setSendingPoll(true);
+    try {
+      const result = await sendGroupMessage(
+        selectedHangout.group_chat.group_id,
+        {
+          messageType: "poll",
+          payload: {
+            kind: "poll",
+            question,
+            options,
+          },
+        },
+        token,
+      );
+
+      if (result?.success) {
+        resetPollComposer();
+        shouldAutoScrollRef.current = true;
+        void loadGroupMessages(selectedHangout.group_chat.group_id, token, false);
+      } else {
+        toast({ title: "Poll failed", description: result?.error || "Could not create poll." });
+      }
+    } finally {
+      setSendingPoll(false);
+    }
+  };
+
+  const handleVotePoll = async (pollId: string, optionId: string) => {
+    if (!token || !selectedHangout?.group_chat?.group_id) return;
+    if (!pollId) {
+      toast({ title: "Vote failed", description: "Poll identifier is missing. Refresh the chat and try again." });
+      return;
+    }
+
+    try {
+      const result = await voteInPoll(selectedHangout.group_chat.group_id, pollId, optionId, token);
+      if (result?.success) {
+        void loadGroupMessages(selectedHangout.group_chat.group_id, token, false);
+      } else {
+        toast({ title: "Vote failed", description: result?.error || "Could not submit vote." });
+      }
+    } catch {
+      toast({ title: "Vote failed", description: "Unable to submit poll vote." });
+    }
   };
 
   const handleMediaSelected = (event: ChangeEvent<HTMLInputElement>) => {
@@ -858,6 +969,46 @@ const SocialPage = () => {
                                     </a>
                                   ) : null}
 
+                                  {payload.kind === "poll" ? (
+                                    <div className="space-y-3">
+                                      <p className="text-sm font-semibold">{payload.question || "Poll"}</p>
+                                      <div className="space-y-2">
+                                        {(payload.options || []).map((option) => {
+                                          const hasVoted = Boolean(payload.user_vote_option_id);
+                                          const isSelected = payload.user_vote_option_id === option.option_id;
+                                          const canChangeVote = hasVoted && !isSelected;
+                                          const pollId = payload.poll_id;
+                                          return (
+                                            <div
+                                              key={option.option_id}
+                                              className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
+                                                isSelected ? "border-primary bg-primary/10" : "border-border/60 bg-background"
+                                              }`}
+                                            >
+                                              <div>
+                                                <p className="text-sm">{option.option_text}</p>
+                                                <p className="text-xs text-muted-foreground">{option.votes ?? 0} votes</p>
+                                              </div>
+                                              {!hasVoted || canChangeVote ? (
+                                                <Button
+                                                  type="button"
+                                                  size="icon"
+                                                  variant="outline"
+                                                  disabled={!pollId || isSelected}
+                                                  onClick={() => void handleVotePoll(pollId ?? "", option.option_id)}
+                                                >
+                                                  {hasVoted ? "Change" : "Vote"}
+                                                </Button>
+                                              ) : (
+                                                <span className="text-xs text-foreground font-semibold">Voted</span>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
                                   {payload.kind === "text" ? (
                                     <p className="text-sm whitespace-pre-wrap break-words">{payload.text || ""}</p>
                                   ) : null}
@@ -929,6 +1080,15 @@ const SocialPage = () => {
                         <Button
                           type="button"
                           size="icon"
+                          variant={pollComposerOpen ? "secondary" : "soft"}
+                          onClick={() => setPollComposerOpen((prev) => !prev)}
+                          title="Create poll"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
                           variant={isRecording ? "secondary" : "soft"}
                           onClick={() => void handleToggleVoiceRecording()}
                           title={isRecording ? "Stop recording" : "Record voice"}
@@ -947,6 +1107,59 @@ const SocialPage = () => {
                         </Button>
                         {isRecording && <span className="text-xs text-muted-foreground self-center">Recording voice...</span>}
                       </div>
+
+                      {pollComposerOpen && (
+                        <div className="rounded-2xl border border-border/60 bg-muted/5 p-3 space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">Create Poll</p>
+                            <Button type="button" size="icon" variant="ghost" onClick={() => setPollComposerOpen(false)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <Input
+                            placeholder="Poll question"
+                            value={pollQuestion}
+                            onChange={(event) => setPollQuestion(event.target.value)}
+                          />
+                          <div className="space-y-2">
+                            {pollOptions.map((option, index) => (
+                              <div key={`poll-option-${index}`} className="flex items-center gap-2">
+                                <Input
+                                  placeholder={`Option ${index + 1}`}
+                                  value={option}
+                                  onChange={(event) => {
+                                    const nextOptions = [...pollOptions];
+                                    nextOptions[index] = event.target.value;
+                                    setPollOptions(nextOptions);
+                                  }}
+                                />
+                                {pollOptions.length > 2 && (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    onClick={() => handleRemovePollOption(index)}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="outline" onClick={handleAddPollOption}>
+                              Add option
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void handleSendPoll()}
+                              disabled={sendingPoll || !pollQuestion.trim() || pollOptions.filter(Boolean).length < 2}
+                            >
+                              {sendingPoll ? "Sending poll..." : "Send poll"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex gap-2">
                         <Input

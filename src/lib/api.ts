@@ -58,6 +58,11 @@ export async function loginUser({ email, password }) {
   return res.json();
 }
 
+// Note: Friend-related functions are now imported from module service files above
+// searchUsers, getFriendRequestStatus, sendFriendRequest, acceptFriendRequest, 
+// rejectFriendRequest, getIncomingFriendRequests, getAcceptedFriends are all re-exported
+// from @/modules/friends-interaction/services/friendsApi
+
 export async function editProfile({ name, username, photo, interests, date_of_birth, gender, token }) {
   const res = await fetch('http://localhost:3001/api/user/profile', {
     method: 'PUT',
@@ -69,73 +74,9 @@ export async function editProfile({ name, username, photo, interests, date_of_bi
   });
   return res.json();
 }
-// Friend search and requests
-export async function searchUsers(query: string, token: string) {
-  const res = await fetch(`http://localhost:3001/api/user/search?q=${encodeURIComponent(query)}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  return res.json();
-}
 
 export async function getUserProfile(userId: string, token: string) {
   const res = await fetch(`http://localhost:3001/api/user/${userId}/profile`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  return res.json();
-}
-
-export async function getFriendRequestStatus(userId: string, token: string) {
-  const res = await fetch(`http://localhost:3001/api/user/${userId}/friend-status`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  return res.json();
-}
-
-export async function sendFriendRequest(addresseeId: string, token: string) {
-  const res = await fetch('http://localhost:3001/api/user/friend-request/send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ addressee_id: addresseeId }),
-  });
-  return res.json();
-}
-
-export async function acceptFriendRequest(requesterId: string, token: string) {
-  const res = await fetch('http://localhost:3001/api/user/friend-request/accept', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ requester_id: requesterId }),
-  });
-  return res.json();
-}
-
-export async function rejectFriendRequest(requesterId: string, token: string) {
-  const res = await fetch('http://localhost:3001/api/user/friend-request/reject', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ requester_id: requesterId }),
-  });
-  return res.json();
-}
-
-export async function getIncomingFriendRequests(token: string) {
-  const res = await fetch('http://localhost:3001/api/user/friend-requests/incoming', {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  return res.json();
-}
-
-export async function getAcceptedFriends(token: string) {
-  const res = await fetch('http://localhost:3001/api/user/friends', {
     headers: { 'Authorization': `Bearer ${token}` },
   });
   return res.json();

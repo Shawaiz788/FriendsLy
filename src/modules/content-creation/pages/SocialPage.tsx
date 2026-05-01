@@ -1,15 +1,18 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createClient, type RealtimeChannel } from "@supabase/supabase-js";
-import { ArrowDown, ImagePlus, MapPin, Mic, MicOff } from "lucide-react";
+import { ArrowDown, ImagePlus, MapPin, Mic, MicOff, Trash2 } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   addCapsuleMedia,
+  deleteCapsuleMedia,
   getCapsuleDetails,
   getGroupMessages,
   getMyHangouts,
@@ -111,6 +114,9 @@ const SocialPage = () => {
   const [hasUnseenMessages, setHasUnseenMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadingCapsuleMedia, setUploadingCapsuleMedia] = useState(false);
+  const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
+  const [activeCapsuleMedia, setActiveCapsuleMedia] = useState<CapsuleMedia | null>(null);
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recorderStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
@@ -631,6 +637,50 @@ const SocialPage = () => {
     }
   };
 
+  const handleDeleteCapsuleMedia = async (mediaId: string) => {
+    if (!token || !selectedHangout?.capsule?.capsule_id) return;
+
+    const confirmed = window.confirm("Delete this media from the capsule?");
+    if (!confirmed) return;
+
+    const result = await deleteCapsuleMedia(selectedHangout.capsule.capsule_id, mediaId, token);
+    if (!result?.success) {
+      toast({ title: "Delete failed", description: result?.error || "Could not delete media." });
+      return;
+    }
+
+    setCapsuleDetails((prev) => {
+      if (!prev) return prev;
+      return { ...prev, media: (prev.media || []).filter((item) => item.media_id !== mediaId) };
+    });
+  };
+
+  const handleDownloadCapsuleMedia = async (item: CapsuleMedia) => {
+    try {
+      const response = await fetch(item.media_url, { mode: "cors" });
+      if (!response.ok) throw new Error("Failed to download media");
+
+      const blob = await response.blob();
+      const extension = item.media_type === "video" ? "mp4" : "jpg";
+      const fileName = `capsule-${item.media_id}.${extension}`;
+      const objectUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      toast({
+        title: "Download failed",
+        description: err instanceof Error ? err.message : "Could not download media.",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <div className="px-6 pt-6 space-y-6">
@@ -949,17 +999,42 @@ const SocialPage = () => {
                         <div className="space-y-2">
                           <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Capsule Media</p>
                           {capsuleDetails.media?.length ? (
-                            <div className="grid grid-cols-2 gap-3">
-                              {capsuleDetails.media.map((item) => (
-                                <div key={item.media_id} className="rounded-lg overflow-hidden border border-border/40">
-                                  {item.media_type === "video" ? (
-                                    <video controls src={item.media_url} className="w-full h-40 object-cover" />
-                                  ) : (
-                                    <img src={item.media_url} alt="Capsule media" className="w-full h-40 object-cover" />
-                                  )}
+                            (() => {
+                              const allMedia = capsuleDetails.media || [];
+                              const previewCount = 4;
+                              const previewMedia = allMedia.slice(0, previewCount);
+                              const extraCount = allMedia.length - previewCount;
+
+                              return (
+                                <div className="grid grid-cols-2 gap-3">
+                                  {previewMedia.map((item, index) => {
+                                    const showOverlay = index === previewCount - 1 && extraCount > 0;
+
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={item.media_id}
+                                        className="relative rounded-lg overflow-hidden border border-border/40 text-left"
+                                        onClick={() => setMediaDialogOpen(true)}
+                                      >
+                                        {item.media_type === "video" ? (
+                                          <video controls={false} muted src={item.media_url} className="w-full h-36 object-cover" />
+                                        ) : (
+                                          <img src={item.media_url} alt="Capsule media" className="w-full h-36 object-cover" />
+                                        )}
+
+                                        {showOverlay && (
+                                          <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center text-white">
+                                            <span className="text-2xl font-semibold">+{extraCount}</span>
+                                            <span className="text-xs uppercase tracking-wider">View all</span>
+                                          </div>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })()
                           ) : (
                             <p className="text-sm text-muted-foreground">No media added yet.</p>
                           )}
@@ -1008,6 +1083,95 @@ const SocialPage = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={mediaDialogOpen} onOpenChange={setMediaDialogOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Capsule Media</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh] pr-3">
+            {capsuleDetails?.media?.length ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {capsuleDetails.media.map((item) => (
+                  <button
+                    type="button"
+                    key={item.media_id}
+                    className="relative rounded-xl overflow-hidden border border-border/50 text-left"
+                    onClick={() => {
+                      setActiveCapsuleMedia(item);
+                      setMediaViewerOpen(true);
+                    }}
+                  >
+                    {item.media_type === "video" ? (
+                      <video controls src={item.media_url} className="w-full h-48 object-cover" />
+                    ) : (
+                      <img src={item.media_url} alt="Capsule media" className="w-full h-48 object-cover" />
+                    )}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="secondary"
+                      className="absolute top-2 right-2"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleDeleteCapsuleMedia(item.media_id);
+                      }}
+                      title="Delete media"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No media added yet.</p>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={mediaViewerOpen}
+        onOpenChange={(open) => {
+          setMediaViewerOpen(open);
+          if (!open) setActiveCapsuleMedia(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Media Viewer</DialogTitle>
+          </DialogHeader>
+          {activeCapsuleMedia ? (
+            <div className="space-y-3">
+              <div className="rounded-xl overflow-hidden border border-border/50 bg-muted/20">
+                {activeCapsuleMedia.media_type === "video" ? (
+                  <video controls src={activeCapsuleMedia.media_url} className="w-full max-h-[65vh] object-contain" />
+                ) : (
+                  <img src={activeCapsuleMedia.media_url} alt="Capsule media" className="w-full max-h-[65vh] object-contain" />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleDownloadCapsuleMedia(activeCapsuleMedia)}
+                >
+                  Download
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleDeleteCapsuleMedia(activeCapsuleMedia.media_id)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Select media to preview.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>

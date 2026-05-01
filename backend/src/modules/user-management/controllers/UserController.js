@@ -132,7 +132,33 @@ const UserController = {
         return res.status(400).json({ error: error.message });
       }
 
-      return res.json({ data: data || null });
+      // If no preferences exist, create default ones
+      if (!data) {
+        console.log('No intent preferences found for user, creating defaults:', userId);
+        const defaultPrefs = {
+          active_intent: 'Free',
+          enabled_intents: ['Free', 'Busy', 'Studying', 'Hungry', 'Working', 'Exercising', 'Just Chilling'],
+          inner_radius_km: 1,
+          outer_radius_km: 5,
+          auto_expire: true
+        };
+
+        const { data: createdData, error: createError } = await authenticatedSupabase
+          .from('user_intent_preferences')
+          .insert([{ user_id: userId, ...defaultPrefs }])
+          .select('active_intent, enabled_intents, inner_radius_km, outer_radius_km, auto_expire')
+          .single();
+
+        if (createError) {
+          // Log the error but don't fail - return defaults
+          console.log('Warning: Could not create default intent preferences:', createError.message);
+          return res.json({ data: defaultPrefs });
+        }
+
+        return res.json({ data: createdData || defaultPrefs });
+      }
+
+      return res.json({ data });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -260,6 +286,24 @@ const UserController = {
       return res.status(400).json({ error: profileError.message });
     }
     console.log('Profile inserted successfully');
+
+    // 4. Create default intent preferences for the user
+    const { error: preferencesError } = await supabase.from('user_intent_preferences').insert([
+      {
+        user_id: authData.user.id,
+        active_intent: 'Free',
+        enabled_intents: ['Free', 'Busy', 'Studying', 'Hungry', 'Working', 'Exercising', 'Just Chilling'],
+        inner_radius_km: 1,
+        outer_radius_km: 5,
+        auto_expire: true
+      }
+    ]);
+    if (preferencesError) {
+      console.log('Intent preferences insertion error:', preferencesError);
+      return res.status(400).json({ error: preferencesError.message });
+    }
+    console.log('Intent preferences created successfully');
+
     res.status(201).json({ user: authData.user });
   },
   async editProfile(req, res) {

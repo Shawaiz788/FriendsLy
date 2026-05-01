@@ -64,6 +64,7 @@ router.post('/media/posts/:postId/comments', requireAuth, MediaController.addCom
 router.get('/capsules/:capsuleId', requireAuth, HangoutController.getCapsuleDetails);
 router.post('/capsules/:capsuleId/reflections', requireAuth, HangoutController.addCapsuleReflection);
 router.post('/capsules/:capsuleId/media', requireAuth, HangoutController.addCapsuleMedia);
+router.delete('/capsules/:capsuleId/media/:mediaId', requireAuth, HangoutController.deleteCapsuleMedia);
 router.get('/:userId/profile', requireAuth, UserController.getUserProfile);
 router.get('/:userId/friend-status', requireAuth, UserController.getFriendRequestStatus);
 router.post('/friend-request/send', requireAuth, UserController.sendFriendRequest);

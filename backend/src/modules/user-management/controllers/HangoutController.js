@@ -9,6 +9,59 @@ const createAuthenticatedClient = async (token) => {
   });
 };
 
+const tryCreateSignedMediaUrl = async (mediaUrl) => {
+  const url = String(mediaUrl || '').trim();
+  if (!url) return null;
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  if (!serviceRoleKey || !supabaseUrl) return null;
+
+  const marker = '/storage/v1/object/';
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+
+  const after = url.slice(idx + marker.length);
+  const parts = after.split('/');
+  if (parts.length < 3) return null;
+
+  const visibilitySegment = parts[0];
+  if (visibilitySegment === 'sign') {
+    return url;
+  }
+
+  const bucket = parts[1];
+  const objectPath = parts.slice(2).join('/');
+  if (!bucket || !objectPath) return null;
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+
+  const { data, error } = await adminSupabase.storage.from(bucket).createSignedUrl(objectPath, 60 * 60);
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+};
+
+const parseSupabaseStoragePath = (mediaUrl) => {
+  const url = String(mediaUrl || '').trim();
+  if (!url) return null;
+
+  const marker = '/storage/v1/object/';
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+
+  const after = url.slice(idx + marker.length);
+  const parts = after.split('/');
+  if (parts.length < 3) return null;
+
+  const bucket = parts[1];
+  let objectPath = parts.slice(2).join('/');
+  if (!bucket || !objectPath) return null;
+
+  objectPath = objectPath.split('?')[0];
+  return { bucket, objectPath };
+};
+
 const resolveIntentId = async (supabase, intentName) => {
   const normalizedIntent = (intentName || 'Hangout').trim();
 
@@ -896,6 +949,43 @@ const HangoutController = {
       if (membershipError) throw membershipError;
       if (!membership) return res.status(403).json({ error: 'You are not part of this hangout capsule' });
 
+      // Fetch media
+      const { data: media, error: mediaError } = await supabase
+        .from('capsule_media')
+        .select('media_id, media_url, media_type, uploaded_by, created_at')
+        .eq('capsule_id', capsuleId)
+        .order('created_at', { ascending: false });
+
+      if (mediaError) throw mediaError;
+
+      // Get uploader profiles for media
+      const uploaderIds = Array.from(new Set((media || []).map((row) => row.uploaded_by)));
+      let uploaderProfiles = [];
+      if (uploaderIds.length) {
+        const { data, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('user_id, full_name, username, profile_photo_url')
+          .in('user_id', uploaderIds);
+
+        if (profilesError) throw profilesError;
+        uploaderProfiles = data || [];
+      }
+      const profileByUserId = Object.fromEntries((uploaderProfiles || []).map((row) => [row.user_id, row]));
+
+      const mediaData = (media || []).map((m) => ({
+        ...m,
+        media_url: m.media_url,
+        uploader: profileByUserId[m.uploaded_by] || null,
+      }));
+
+      for (const item of mediaData) {
+        const signed = await tryCreateSignedMediaUrl(item.media_url);
+        if (signed) {
+          item.media_url = signed;
+        }
+      }
+
+      // Fetch reflections
       const { data: reflections, error: reflectionsError } = await supabase
         .from('capsule_reflections')
         .select('reflection_id, user_id, reflection_text, created_at')
@@ -915,14 +1005,14 @@ const HangoutController = {
         if (profilesError) throw profilesError;
         reflectionProfiles = data || [];
       }
-      const profileByUserId = Object.fromEntries((reflectionProfiles || []).map((row) => [row.user_id, row]));
+      const reflectionProfileByUserId = Object.fromEntries((reflectionProfiles || []).map((row) => [row.user_id, row]));
 
       const reflectionData = (reflections || []).map((reflection) => ({
         ...reflection,
-        author: profileByUserId[reflection.user_id] || null,
+        author: reflectionProfileByUserId[reflection.user_id] || null,
       }));
 
-      return res.json({ data: { ...capsule, reflections: reflectionData } });
+      return res.json({ data: { ...capsule, media: mediaData, reflections: reflectionData } });
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Capsule tables are missing. Apply schema.sql to your database.' });
@@ -1043,6 +1133,77 @@ const HangoutController = {
       if (createMediaError) throw createMediaError;
 
       return res.json({ success: true, data: createdMedia });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'Capsule tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
+  async deleteCapsuleMedia(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { capsuleId, mediaId } = req.params;
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      const supabase = await createAuthenticatedClient(token);
+
+      const { data: capsule, error: capsuleError } = await supabase
+        .from('capsules')
+        .select('capsule_id, hangout_id')
+        .eq('capsule_id', capsuleId)
+        .single();
+
+      if (capsuleError) throw capsuleError;
+
+      const { data: membership, error: membershipError } = await supabase
+        .from('hangout_participants')
+        .select('hangout_id, status')
+        .eq('hangout_id', capsule.hangout_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (membershipError) throw membershipError;
+      if (!membership) return res.status(403).json({ error: 'You are not part of this hangout capsule' });
+
+      const { data: mediaRow, error: mediaError } = await supabase
+        .from('capsule_media')
+        .select('media_id, media_url, uploaded_by')
+        .eq('capsule_id', capsuleId)
+        .eq('media_id', mediaId)
+        .single();
+
+      if (mediaError) throw mediaError;
+      if (!mediaRow) return res.status(404).json({ error: 'Media not found' });
+
+      if (mediaRow.uploaded_by !== userId) {
+        return res.status(403).json({ error: 'Only the uploader can delete this media' });
+      }
+
+      const { error: deleteError } = await supabase
+        .from('capsule_media')
+        .delete()
+        .eq('capsule_id', capsuleId)
+        .eq('media_id', mediaId);
+
+      if (deleteError) throw deleteError;
+
+      const storagePath = parseSupabaseStoragePath(mediaRow.media_url);
+      if (storagePath) {
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (serviceRoleKey) {
+          const { createClient } = await import('@supabase/supabase-js');
+          const adminSupabase = createClient(process.env.SUPABASE_URL, serviceRoleKey);
+          await adminSupabase.storage.from(storagePath.bucket).remove([storagePath.objectPath]);
+        }
+      }
+
+      return res.json({ success: true });
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Capsule tables are missing. Apply schema.sql to your database.' });

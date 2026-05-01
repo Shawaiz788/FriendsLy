@@ -194,3 +194,14 @@ export async function addCapsuleMedia(
 
   return parseResponseSafe(res);
 }
+
+export async function deleteCapsuleMedia(capsuleId: string, mediaId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/capsules/${capsuleId}/media/${mediaId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return parseResponseSafe(res);
+}

@@ -13,24 +13,24 @@
  FR9: The system shall allow users to log out from all active devices simultaneously.
 
 3.2 Social Aura System (Core Feature)
-FR10: The system shall allow users to create a Social Aura.
- FR11: The Aura shall include intent selection (e.g., coffee, walk).
+FR10: The system shall allow users to create a Social Aura. (DONE)
+ FR11: The Aura shall include intent selection (e.g., coffee, walk). (DONE)
  FR12: The Aura shall allow visual customization (color, emoji, glow).
- FR13: The system shall display approximate proximity only.
- FR14: The system shall notify users of auras overlapping.
- FR15: Users shall be able to accept, decline, or snooze aura suggestions.
+ FR13: The system shall display approximate proximity only.(DONE)
+ FR14: The system shall notify users of auras overlapping.(DONE)
+ FR15: Users shall be able to accept, decline, or snooze aura suggestions. 
 
 3.4 Serendipity Engine
-FR16: The system shall analyze intent and proximity patterns.
- FR17: The system shall suggest spontaneous hangouts.
- FR18: The system shall allow users to opt out of suggestions.
- FR19: The system shall log suggestion reasoning for transparency.
+FR16: The system shall analyze intent and proximity patterns. (DONE)
+ FR17: The system shall suggest spontaneous hangouts.(DONE)
+ FR18: The system shall allow users to opt out of suggestions. (DONE)
+ FR19: The system shall log suggestion reasoning for transparency. (DONE)
 
 3.5 Content Creation & Sharing
  FR20: The system shall support 24-hour ephemeral stories.
- FR21: The system shall allow photo posts.
- FR22: The system shall allow video posts.
- FR23: The system shall allow short text micro-blog posts.
+ FR21: The system shall allow photo posts.(DONE)
+ FR22: The system shall allow video posts.(DONE)
+ FR23: The system shall allow short text micro-blog posts.(DONE)
  FR24: The system shall provide privacy controls (friends-only, close friends, public).
  FR25: The system shall support collaborative posts.
 
@@ -53,11 +53,11 @@ FR29: The system shall create a temporary group chat upon Hangout confirmation.
  FR37: The system shall auto save photos and videos from the temporary group chat into the Hangout capsule.
 
 3.9 Intent-Based Hangouts
-FR38: The system shall provide predefined hangout intents (Coffee, Walk, Study, etc.).
-FR39: The system shall allow one-tap hangout creation.
+FR38: The system shall provide predefined hangout intents (Coffee, Walk, Study, etc.).(DONE)
+FR39: The system shall allow one-tap hangout creation.(DONE)
 
 3.10 Discovery & Explore
- FR40: The system shall provide a friend feed.
+ FR40: The system shall provide a friend feed.(DONE)
  FR41: The system shall display nearby highlights.
  FR42: The system shall provide curated Explore content.
  FR43: The system shall display trending local activities.

@@ -9,8 +9,8 @@
  FR5: The system shall allow permanent account deletion.
  FR6: The system shall allow users to download their data.(DONE)
  FR7: The system shall verify email address or phone number during registration.(DONE)
- FR8: The system shall automatically terminate inactive sessions after a defined timeout period.
- FR9: The system shall allow users to log out from all active devices simultaneously.
+ FR8: The system shall automatically terminate inactive sessions after a defined timeout period.(DONE)
+ FR9: The system shall allow users to log out from all active devices simultaneously.(DONE)
 
 3.2 Social Aura System (Core Feature)
 FR10: The system shall allow users to create a Social Aura. (DONE)
@@ -35,22 +35,22 @@ FR16: The system shall analyze intent and proximity patterns. (DONE)
  FR25: The system shall support collaborative posts.
 
 3.6 Interaction & Communication
-FR26: The system shall support voice notes in chat.
- FR27: The system shall support polls for hangouts.
+FR26: The system shall support voice notes in chat.(DONE)
+ FR27: The system shall support polls for hangouts.(DONE)
  FR28: The system shall implement end-to-end encrypted messaging.
 
 3.7 Group Chats
-FR29: The system shall create a temporary group chat upon Hangout confirmation.
- FR30: The group chat shall allow text messages, polls, and shared notes.
+FR29: The system shall create a temporary group chat upon Hangout confirmation.(DONE)
+ FR30: The group chat shall allow text messages, polls, and shared notes.(DONE)
  FR31: The group chat shall automatically delete after event completion by default.
  FR32: The system shall allow users to convert the temporary group chat into a permanent group chat before deletion.
 
 3.8 Hangout Capsules
- FR33: The system shall allow confirmed attendees to co-create a Hangout Capsule after or during a meetup.
- FR34: The Hangout Capsule shall function as a digital time capsule summarizing the hangout.
+ FR33: The system shall allow confirmed attendees to co-create a Hangout Capsule after or during a meetup.(DONE)
+ FR34: The Hangout Capsule shall function as a digital time capsule summarizing the hangout. (DONE)
  FR35: The capsule shall automatically include structured information such as hangout type, date, time, location, and list of attendees.
- FR36: The capsule shall allow attendees to add photos, short videos, audio clips, and short written reflections.
- FR37: The system shall auto save photos and videos from the temporary group chat into the Hangout capsule.
+ FR36: The capsule shall allow attendees to add photos, short videos, audio clips, and short written reflections.(short written reflections and audio clips to be added)
+ FR37: The system shall auto save photos and videos from the temporary group chat into the Hangout capsule.(DONE)
 
 3.9 Intent-Based Hangouts
 FR38: The system shall provide predefined hangout intents (Coffee, Walk, Study, etc.).(DONE)
@@ -59,18 +59,18 @@ FR39: The system shall allow one-tap hangout creation.(DONE)
 3.10 Discovery & Explore
  FR40: The system shall provide a friend feed.(DONE)
  FR41: The system shall display nearby highlights.
- FR42: The system shall provide curated Explore content.
+ FR42: The system shall provide curated Explore content.(DONE same as fr42 )
  FR43: The system shall display trending local activities.
 
 3.12 Privacy & Safety
  FR44: The system shall provide granular visibility controls.
- FR45: The system shall allow emergency trusted contacts.
+ FR45: The system shall allow emergency trusted contacts.(DONE)
  FR46: The system shall provide notification management controls.
- FR47: The system shall provide block and report functionality.
+ FR47: The system shall provide block and report functionality.(DONE)
 
 3.13 Accessibility & UX
-FR48: The system shall support dark mode.
-FR49: The system shall provide customizable themes.
+FR48: The system shall support dark mode.(DONE)
+FR49: The system shall provide customizable themes.(DONE)
 
 
 

@@ -18,6 +18,7 @@ export interface PositionedFriend {
   lat: number;
   lng: number;
   avatarUrl?: string;
+  auraEmoji?: string;
 }
 
 export const mockFriends: Friend[] = [
@@ -49,10 +50,12 @@ interface ProximityMapProps {
   outerRadius?: number;
   userPosition?: [number, number];
   userAvatarUrl?: string;
+  userAuraEmoji?: string;
+  userAuraColor?: string;
   friends?: PositionedFriend[];
 }
 
-const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvatarUrl, friends }: ProximityMapProps) => {
+const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvatarUrl, userAuraEmoji, userAuraColor, friends }: ProximityMapProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
@@ -102,18 +105,23 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
     map.setView(mapCenter, map.getZoom(), { animate: false });
 
     if (hasUserPosition) {
+      const auraColor = userAuraColor || "hsl(150, 30%, 45%)";
       if (!outerCircleRef.current) {
         outerCircleRef.current = L.circle(currentUserPos, {
           radius: outerRadius * 1000,
-          color: "hsl(150, 30%, 45%)",
+          color: auraColor,
           weight: 2,
-          fillColor: "hsl(150, 30%, 45%)",
+          fillColor: auraColor,
           fillOpacity: 0.06,
           dashArray: "8 6",
         }).addTo(map);
       } else {
         outerCircleRef.current.setLatLng(currentUserPos);
         outerCircleRef.current.setRadius(outerRadius * 1000);
+        outerCircleRef.current.setStyle({
+          color: auraColor,
+          fillColor: auraColor,
+        });
       }
 
       if (!innerCircleRef.current) {
@@ -149,11 +157,15 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
         ? `<img src="${safeUserAvatarUrl}" alt="You" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`
         : "<span style='color:white;font-weight:700;font-size:13px;font-family:\"DM Sans\",sans-serif;'>You</span>";
 
+      const auraEmojiBadge = userAuraEmoji
+        ? `<div style="position:absolute;bottom:0;right:0;width:26px;height:26px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,0.25);border:2.5px solid ${userAuraColor || '#8b5cf6'};">${userAuraEmoji}</div>`
+        : "";
+
       const userIcon = L.divIcon({
         className: "",
-        html: `<div style="position:relative;width:52px;height:64px;display:flex;align-items:flex-end;justify-content:center;"><div style="position:absolute;top:0;left:50%;transform:translateX(-50%);background:white;color:hsl(150,30%,35%);font-weight:700;font-size:11px;font-family:'DM Sans',sans-serif;padding:2px 8px;border-radius:999px;border:1px solid hsl(150,30%,45%);box-shadow:0 2px 8px rgba(0,0,0,0.1);line-height:1;">You</div><div style="width:44px;height:44px;border-radius:50%;background:hsl(150,30%,45%);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px hsla(150,30%,45%,0.4);border:3px solid white;overflow:hidden;">${userMarkerInner}</div></div>`,
-        iconSize: [52, 64],
-        iconAnchor: [26, 52],
+        html: `<div style="position:relative;width:60px;height:72px;display:flex;align-items:flex-end;justify-content:center;"><div style="position:absolute;top:0;left:50%;transform:translateX(-50%);background:white;color:hsl(150,30%,35%);font-weight:700;font-size:11px;font-family:'DM Sans',sans-serif;padding:2px 8px;border-radius:999px;border:1px solid hsl(150,30%,45%);box-shadow:0 2px 8px rgba(0,0,0,0.1);line-height:1;">You</div><div style="position:relative;width:48px;height:48px;border-radius:50%;background:hsl(150,30%,45%);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px hsla(150,30%,45%,0.4);border:3px solid white;">${userMarkerInner}${auraEmojiBadge}</div></div>`,
+        iconSize: [60, 72],
+        iconAnchor: [30, 72],
       });
 
       if (!userMarkerRef.current) {
@@ -187,7 +199,7 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
 
       const icon = L.divIcon({
         className: "",
-        html: `<div style="width:36px;height:36px;border-radius:50%;background:${presenceColors[friend.presence]};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;font-family:'DM Sans',sans-serif;box-shadow:0 4px 12px ${presenceColors[friend.presence]}66;border:2px solid white;overflow:hidden;">${markerInner}</div>`,
+        html: `<div style="position:relative;width:36px;height:36px;border-radius:50%;background:${presenceColors[friend.presence]};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;font-family:'DM Sans',sans-serif;box-shadow:0 4px 12px ${presenceColors[friend.presence]}66;border:2px solid white;">${markerInner}</div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 18],
       });
@@ -199,7 +211,7 @@ const ProximityMap = ({ innerRadius = 1, outerRadius = 5, userPosition, userAvat
 
     friendLayer.addTo(map);
     friendLayerRef.current = friendLayer;
-  }, [hasUserPosition, innerRadius, mapCenter, outerRadius, currentUserPos, positionedFriends, userAvatarUrl]);
+  }, [hasUserPosition, innerRadius, mapCenter, outerRadius, currentUserPos, positionedFriends, userAvatarUrl, userAuraEmoji, userAuraColor]);
 
   return (
     <div

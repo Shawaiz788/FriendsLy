@@ -15,7 +15,7 @@
 3.2 Social Aura System (Core Feature)
 FR10: The system shall allow users to create a Social Aura. (DONE)
  FR11: The Aura shall include intent selection (e.g., coffee, walk). (DONE)
- FR12: The Aura shall allow visual customization (color, emoji, glow).
+ FR12: The Aura shall allow visual customization (color, emoji, glow).(DONE)
  FR13: The system shall display approximate proximity only.(DONE)
  FR14: The system shall notify users of auras overlapping.(DONE)
  FR15: Users shall be able to accept, decline, or snooze aura suggestions. 

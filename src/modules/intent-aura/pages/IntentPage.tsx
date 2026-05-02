@@ -3,6 +3,7 @@ import BottomNav from "@/components/BottomNav";
 import IntentBadge from "@/components/IntentBadge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import AuraCustomizer from "@/modules/intent-aura/components/AuraCustomizer";
 import {
   loadIntentPreferences,
   saveIntentPreferences,
@@ -101,8 +102,11 @@ const IntentPage = () => {
   return (
     <div className="min-h-screen bg-background pb-24">
       <div className="px-6 pt-6">
-        <h1 className="font-serif text-2xl font-bold text-foreground mb-2">Intent & Radius</h1>
+        <h1 className="font-serif text-2xl font-bold text-foreground mb-2">Intent & Aura</h1>
         <p className="text-muted-foreground text-sm mb-6">Control how you appear to friends</p>
+
+        {/* Aura Customization */}
+        <AuraCustomizer />
 
         {/* Current Intent */}
         <div className="glass-card rounded-2xl p-5 mb-6">

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Bell, Ghost } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { useAuraPreferences } from "@/hooks/useAuraPreferences";
 import { acceptSuggestedHangout, getFriendsLocations, getMyHangoutInvites, updateMyLocation } from "@/lib/api";
 import {
   DEFAULT_INTENT_PREFERENCES,
@@ -82,6 +83,7 @@ const offsetCoordinateByKm = (
 };
 
 const HomePage = () => {
+  const { auraPreferences } = useAuraPreferences();
   const [activeIntent, setActiveIntent] = useState(() => loadIntentPreferences().activeIntent);
   const [enabledIntents, setEnabledIntents] = useState(() => loadIntentPreferences().enabledIntents);
   const [innerRadiusKm, setInnerRadiusKm] = useState(() => loadIntentPreferences().innerRadiusKm);
@@ -331,6 +333,8 @@ const HomePage = () => {
   const mapFriends = useMemo<PositionedFriend[]>(() => {
     if (!userLocation) return [];
 
+    const auraEmojis = ["✨", "🌟", "⭐", "💫", "🌠", "🔮", "💎", "🎇"];
+
     const userPos: [number, number] = [userLocation.lat, userLocation.lng];
     const realFriends = friendsLocations
       .filter(
@@ -354,6 +358,9 @@ const HomePage = () => {
         const presence: PositionedFriend["presence"] =
           distanceKm <= innerRadiusKm ? "nearby" : distanceKm <= outerRadiusKm ? "city" : "away";
 
+        // Generate consistent Aura emoji per friend
+        const emojiIndex = friendSeed % auraEmojis.length;
+
         return {
           userId: friend.user_id,
           name: friend.full_name,
@@ -362,6 +369,7 @@ const HomePage = () => {
           lat: approxLat,
           lng: approxLng,
           avatarUrl: friend.profile_photo_url || undefined,
+          auraEmoji: auraEmojis[emojiIndex],
         };
       });
 
@@ -587,6 +595,8 @@ const HomePage = () => {
           outerRadius={outerRadiusKm}
           userPosition={!ghostMode && userLocation ? [userLocation.lat, userLocation.lng] : undefined}
           userAvatarUrl={!ghostMode ? userAvatarUrl || undefined : undefined}
+          userAuraEmoji={auraPreferences?.emoji}
+          userAuraColor={auraPreferences?.color}
           friends={mapFriends}
         />
       </div>

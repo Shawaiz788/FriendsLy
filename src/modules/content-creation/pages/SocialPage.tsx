@@ -986,7 +986,7 @@ const SocialPage = () => {
                                               }`}
                                             >
                                               <div>
-                                                <p className="text-sm">{option.option_text}</p>
+                                                <p className="text-sm text-black">{option.option_text}</p>
                                                 <p className="text-xs text-muted-foreground">{option.votes ?? 0} votes</p>
                                               </div>
                                               {!hasVoted || canChangeVote ? (

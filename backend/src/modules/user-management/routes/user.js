@@ -7,7 +7,21 @@ import MediaController from '../controllers/MediaController.js';
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
-// Middleware to check Supabase JWT
+const sessionIdleTimeoutMs = Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES || 30) * 60 * 1000;
+const lastSeenByToken = new Map();
+
+const decodeJwtPayload = (token) => {
+	try {
+		const payloadPart = token.split('.')[1];
+		if (!payloadPart) return null;
+		const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+		return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+	} catch {
+		return null;
+	}
+};
+
+// Middleware to check Supabase JWT + idle timeout
 function requireAuth(req, res, next) {
 	const rawAuth = req.headers['authorization'] || '';
 	const token = String(rawAuth).replace(/^Bearer\s+/i, '').trim();
@@ -18,6 +32,18 @@ function requireAuth(req, res, next) {
 		return res.status(401).json({ error: 'Invalid auth token (expected JWT)' });
 	}
 
+	const payload = decodeJwtPayload(token);
+	if (payload?.exp && Date.now() >= payload.exp * 1000) {
+		return res.status(401).json({ error: 'Session has expired' });
+	}
+
+	const lastSeen = lastSeenByToken.get(token);
+	if (sessionIdleTimeoutMs > 0 && lastSeen && Date.now() - lastSeen > sessionIdleTimeoutMs) {
+		lastSeenByToken.delete(token);
+		return res.status(401).json({ error: 'Session timed out due to inactivity' });
+	}
+
+	lastSeenByToken.set(token, Date.now());
 	req.supabaseToken = token;
 	next();
 }
@@ -34,6 +60,7 @@ router.post('/deactivate', requireAuth, UserController.deactivateAccount);
 router.delete('/delete', requireAuth, UserController.deleteAccount);
 router.get('/download', requireAuth, UserController.downloadData);
 router.post('/verify', requireAuth, UserController.verify);
+router.post('/logout', requireAuth, UserController.logout);
 router.post('/logoutAll', requireAuth, UserController.logoutAll);
 
 // Friends & Search endpoints

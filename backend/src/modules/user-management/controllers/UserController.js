@@ -578,8 +578,50 @@ const UserController = {
   async verify(req, res) {
     res.json({ message: 'Verification handled by Supabase.' });
   },
+  async logout(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { error } = await authenticatedSupabase.auth.signOut();
+      if (error) {
+        return res.json({ success: true, warning: error.message });
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
   async logoutAll(req, res) {
-    res.json({ message: 'Logout from all devices is handled by password change.' });
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceRoleKey) {
+      return res.status(500).json({
+        error: 'Missing SUPABASE_SERVICE_ROLE_KEY in backend env. Add it to backend/.env and restart the backend.',
+      });
+    }
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const adminSupabase = createClient(process.env.SUPABASE_URL, serviceRoleKey);
+
+      const { error } = await adminSupabase.auth.admin.signOut(userData.user.id, { scope: 'global' });
+      if (error) return res.status(400).json({ error: error.message });
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   },
   async sessionTimeout(req, res) {
     res.json({ message: 'Session timeout handled by Supabase.' });

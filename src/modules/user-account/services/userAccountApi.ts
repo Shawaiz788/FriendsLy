@@ -176,3 +176,23 @@ export async function reportUser(reportedUserId: string, reason: string, token: 
   });
   return parseResponse(res);
 }
+
+export async function logoutCurrentSession(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/logout`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return parseResponse(res);
+}
+
+export async function logoutAllSessions(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/logoutAll`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return parseResponse(res);
+}

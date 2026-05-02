@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { editProfile, updateMyLocation } from "@/lib/api";
+import { editProfile, logoutAllSessions, logoutCurrentSession, updateMyLocation } from "@/lib/api";
 
 async function fetchProfile(token) {
   // Get user id from token
@@ -76,6 +76,9 @@ const ProfilePage = () => {
   const [showApplyLocationAction, setShowApplyLocationAction] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
   const [downloadSelection, setDownloadSelection] = useState({
     profile: true,
     intent: true,
@@ -592,10 +595,49 @@ const ProfilePage = () => {
     }
   }
 
-  const handleLogout = () => {
+  const clearLocalSession = () => {
     localStorage.removeItem("supabaseToken");
     localStorage.removeItem("cachedProfile");
-    navigate("/");
+  };
+
+  const handleLogoutCurrent = async () => {
+    setLogoutLoading(true);
+    setLogoutError("");
+    try {
+      if (token) {
+        const result = await logoutCurrentSession(token);
+        if (result?.error) {
+          setLogoutError(result.error);
+        }
+      }
+    } catch (err) {
+      setLogoutError(err instanceof Error ? err.message : "Logout failed");
+    } finally {
+      clearLocalSession();
+      setLogoutLoading(false);
+      setLogoutDialogOpen(false);
+      navigate("/");
+    }
+  };
+
+  const handleLogoutAll = async () => {
+    setLogoutLoading(true);
+    setLogoutError("");
+    try {
+      if (token) {
+        const result = await logoutAllSessions(token);
+        if (result?.error) {
+          setLogoutError(result.error);
+        }
+      }
+    } catch (err) {
+      setLogoutError(err instanceof Error ? err.message : "Logout failed");
+    } finally {
+      clearLocalSession();
+      setLogoutLoading(false);
+      setLogoutDialogOpen(false);
+      navigate("/");
+    }
   };
 
   const toggleDownloadKey = (key: keyof typeof downloadSelection) => {
@@ -955,7 +997,7 @@ const ProfilePage = () => {
             >
               <Download className="w-4 h-4" /> Download my data
             </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={handleLogout}>
+            <Button variant="outline" className="w-full justify-start" onClick={() => setLogoutDialogOpen(true)}>
               <LogOut className="w-4 h-4" /> Log out
             </Button>
             <Button variant="destructive" className="w-full justify-start">
@@ -1009,6 +1051,29 @@ const ProfilePage = () => {
             </Button>
             <Button variant="hero" type="button" onClick={handleDownloadData} disabled={isDownloading}>
               {isDownloading ? "Preparing…" : "Download"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log out</DialogTitle>
+            <DialogDescription>Choose whether to log out only this device or all devices.</DialogDescription>
+          </DialogHeader>
+
+          {logoutError && <div className="text-sm text-destructive">{logoutError}</div>}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setLogoutDialogOpen(false)} disabled={logoutLoading}>
+              Cancel
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => void handleLogoutCurrent()} disabled={logoutLoading}>
+              {logoutLoading ? "Logging out..." : "This device"}
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void handleLogoutAll()} disabled={logoutLoading}>
+              {logoutLoading ? "Logging out..." : "All devices"}
             </Button>
           </DialogFooter>
         </DialogContent>

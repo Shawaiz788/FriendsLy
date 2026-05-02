@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Heart, MessageCircle, Plus, Upload, User } from "lucide-react";
+import { Heart, MessageCircle, Plus, Upload, User, Users } from "lucide-react";
 
 import BottomNav from "@/components/BottomNav";
+import CollaborativePostCreate from "@/components/CollaborativePostCreate";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +28,7 @@ const MediaPage = () => {
   const [newCaption, setNewCaption] = useState("");
   const [newFile, setNewFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [collabCreateOpen, setCollabCreateOpen] = useState(false);
 
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [commentsByPost, setCommentsByPost] = useState<Record<string, MediaComment[]>>({});
@@ -225,6 +227,11 @@ const MediaPage = () => {
 
             <div className="flex-1" />
 
+            <Button type="button" variant="outline" onClick={() => setCollabCreateOpen(true)} className="gap-2">
+              <Users className="w-4 h-4" />
+              Collaborative
+            </Button>
+
             <Button variant="hero" disabled={!canPost || submitting} onClick={onSubmitPost}>
               {submitting ? "Posting…" : "Post"}
             </Button>
@@ -261,6 +268,12 @@ const MediaPage = () => {
                     <p className="font-semibold text-foreground truncate">{authorName}</p>
                     {post.author?.username ? (
                       <p className="text-xs text-muted-foreground truncate">@{post.author.username}</p>
+                    ) : null}
+                    {post.is_collaborative ? (
+                      <p className="text-xs text-primary flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        Collaborative
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -345,6 +358,12 @@ const MediaPage = () => {
           })}
         </div>
       </div>
+
+      <CollaborativePostCreate
+        open={collabCreateOpen}
+        onClose={() => setCollabCreateOpen(false)}
+        onPostCreated={loadFeed}
+      />
 
       <BottomNav />
     </div>

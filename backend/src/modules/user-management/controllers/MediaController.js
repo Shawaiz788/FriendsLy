@@ -176,7 +176,7 @@ const MediaController = {
       const authed = await createAuthenticatedClient(token);
       const { data: posts, error: postsError } = await authed
         .from("posts")
-        .select("post_id, user_id, content, media_url, media_type, created_at")
+        .select("post_id, user_id, content, media_url, media_type, visibility, is_collaborative, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
 

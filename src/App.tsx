@@ -16,7 +16,6 @@ import SearchPage from "./modules/friends-interaction/pages/SearchPage";
 import SocialPage from "./modules/content-creation/pages/SocialPage";
 import MediaPage from "./modules/content-creation/pages/MediaPage";
 import StoriesPage from "./modules/content-creation/pages/StoriesPage";
-import CollaborativePostsPage from "./modules/content-creation/pages/CollaborativePostsPage";
 import UserProfilePage from "./modules/user-account/pages/UserProfilePage";
 import NotFound from "./modules/core/pages/NotFound";
 
@@ -42,7 +41,7 @@ const App = () => (
           <Route path="/social" element={<SocialPage />} />
           <Route path="/media" element={<MediaPage />} />
           <Route path="/stories" element={<StoriesPage />} />
-          <Route path="/collaborative" element={<CollaborativePostsPage />} />
+          <Route path="/collaborative" element={<Navigate to="/media" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/user/:userId" element={<UserProfilePage />} />
           <Route path="*" element={<NotFound />} />

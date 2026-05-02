@@ -1,5 +1,6 @@
 // Backward-compatible API barrel for legacy imports.
 // New code should import from module service files directly.
+import { API_BASE } from "@/lib/apiBase";
 
 export * from "@/modules/user-account/services/userAccountApi";
 export * from "@/modules/friends-interaction/services/friendsApi";
@@ -8,7 +9,7 @@ export * from "@/modules/location-suggestion/services/locationApi";
 export * from "@/modules/content-creation/services/mediaApi";
 // Check if username is available
 export async function checkUsernameAvailability(username: string) {
-  const res = await fetch(`http://localhost:3002/api/user/check-username?username=${encodeURIComponent(username)}`);
+  const res = await fetch(`${API_BASE}/api/user/check-username?username=${encodeURIComponent(username)}`);
   return res.json();
 }
 
@@ -18,7 +19,7 @@ export async function uploadProfileImage(file: File, userId: string, token: stri
   formData.append('file', file);
   formData.append('userId', userId);
   
-  const res = await fetch('http://localhost:3002/api/user/upload-image', {
+  const res = await fetch(`${API_BASE}/api/user/upload-image`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -31,7 +32,7 @@ export async function uploadProfileImage(file: File, userId: string, token: stri
 // Check if username is available
 // API helpers for registration and login
 export async function registerUser({ name, username, email, phone, password, date_of_birth, gender }) {
-  const res = await fetch('http://localhost:3002/register', {
+  const res = await fetch(`${API_BASE}/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -57,7 +58,7 @@ export async function registerUser({ name, username, email, phone, password, dat
 }
 
 export async function loginUser({ email, password }) {
-  const res = await fetch('http://localhost:3002/login', {
+  const res = await fetch(`${API_BASE}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -78,7 +79,7 @@ export async function loginUser({ email, password }) {
 // from @/modules/friends-interaction/services/friendsApi
 
 export async function editProfile({ name, username, photo, interests, date_of_birth, gender, token }) {
-  const res = await fetch('http://localhost:3002/api/user/profile', {
+  const res = await fetch(`${API_BASE}/api/user/profile`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -90,7 +91,7 @@ export async function editProfile({ name, username, photo, interests, date_of_bi
 }
 
 export async function getUserProfile(userId: string, token: string) {
-  const res = await fetch(`http://localhost:3002/api/user/${userId}/profile`, {
+  const res = await fetch(`${API_BASE}/api/user/${userId}/profile`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
   return res.json();
@@ -100,7 +101,7 @@ export async function updateMyLocation(
   { latitude, longitude }: { latitude: number; longitude: number },
   token: string,
 ) {
-  const res = await fetch('http://localhost:3002/api/user/location', {
+  const res = await fetch(`${API_BASE}/api/user/location`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -121,7 +122,7 @@ export async function updateMyLocation(
 }
 
 export async function getFriendsLocations(token: string) {
-  const res = await fetch('http://localhost:3002/api/user/friends/locations', {
+  const res = await fetch(`${API_BASE}/api/user/friends/locations`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
 
@@ -141,7 +142,7 @@ export async function uploadStoryMedia(file: File, token: string) {
   const formData = new FormData();
   formData.append('file', file);
   
-  const res = await fetch('http://localhost:3002/api/user/stories/upload', {
+  const res = await fetch(`${API_BASE}/api/user/stories/upload`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -152,7 +153,7 @@ export async function uploadStoryMedia(file: File, token: string) {
 }
 
 export async function createStory(mediaUrl: string, mediaType: string, visibility: string, token: string) {
-  const res = await fetch('http://localhost:3002/api/user/stories', {
+  const res = await fetch(`${API_BASE}/api/user/stories`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -168,14 +169,14 @@ export async function createStory(mediaUrl: string, mediaType: string, visibilit
 }
 
 export async function getStories(token: string) {
-  const res = await fetch('http://localhost:3002/api/user/stories', {
+  const res = await fetch(`${API_BASE}/api/user/stories`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
   return res.json();
 }
 
 export async function deleteStory(storyId: string, token: string) {
-  const res = await fetch(`http://localhost:3002/api/user/stories/${storyId}`, {
+  const res = await fetch(`${API_BASE}/api/user/stories/${storyId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` },
   });
@@ -190,7 +191,7 @@ export async function createCollaborativePost(data: {
   visibility?: string;
   collaborators?: string[];
 }, token: string) {
-  const res = await fetch('http://localhost:3002/api/user/collaborative-posts', {
+  const res = await fetch(`${API_BASE}/api/user/collaborative-posts`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -202,7 +203,7 @@ export async function createCollaborativePost(data: {
 }
 
 export async function getCollaborativePosts(token: string) {
-  const res = await fetch('http://localhost:3002/api/user/collaborative-posts', {
+  const res = await fetch(`${API_BASE}/api/user/collaborative-posts`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
   return res.json();
@@ -214,7 +215,7 @@ export async function updateCollaborativePost(postId: string, data: {
   media_type?: string;
   visibility?: string;
 }, token: string) {
-  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}`, {
+  const res = await fetch(`${API_BASE}/api/user/collaborative-posts/${postId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -226,7 +227,7 @@ export async function updateCollaborativePost(postId: string, data: {
 }
 
 export async function deleteCollaborativePost(postId: string, token: string) {
-  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}`, {
+  const res = await fetch(`${API_BASE}/api/user/collaborative-posts/${postId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` },
   });
@@ -234,7 +235,7 @@ export async function deleteCollaborativePost(postId: string, token: string) {
 }
 
 export async function addCollaborator(postId: string, userId: string, token: string) {
-  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}/collaborators`, {
+  const res = await fetch(`${API_BASE}/api/user/collaborative-posts/${postId}/collaborators`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -246,7 +247,7 @@ export async function addCollaborator(postId: string, userId: string, token: str
 }
 
 export async function removeCollaborator(postId: string, userId: string, token: string) {
-  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}/collaborators/${userId}`, {
+  const res = await fetch(`${API_BASE}/api/user/collaborative-posts/${postId}/collaborators/${userId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` },
   });

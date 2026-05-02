@@ -5,6 +5,7 @@ import FriendCard from "@/components/FriendCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/hooks/use-toast";
 import { Search, UserPlus, Check, X, UserCheck, Clock, User, MessageCircle } from "lucide-react";
 import {
   getIncomingFriendRequests,
@@ -149,6 +150,16 @@ const FriendsPage = () => {
     setLoadingSearch(true);
     try {
       const result = await searchUsers(searchQuery, token);
+      if (result?.error) {
+        toast({
+          title: "Could not search friends",
+          description: result.error,
+        });
+        setResults([]);
+        setRequestStatus({});
+        return;
+      }
+
       const nextResults: SearchResult[] = Array.isArray(result?.data) ? result.data : [];
       setResults(nextResults);
 
@@ -162,6 +173,13 @@ const FriendsPage = () => {
         }
       }
       setRequestStatus(statuses);
+    } catch (err) {
+      toast({
+        title: "Could not search friends",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+      setResults([]);
+      setRequestStatus({});
     } finally {
       setLoadingSearch(false);
     }
@@ -174,7 +192,18 @@ const FriendsPage = () => {
       const result = await sendFriendRequest(userId, token);
       if (result?.success) {
         setRequestStatus((prev) => ({ ...prev, [userId]: "pending" }));
+        toast({ title: "Friend request sent" });
+      } else {
+        toast({
+          title: "Could not send request",
+          description: result?.error || "Please try again.",
+        });
       }
+    } catch (err) {
+      toast({
+        title: "Could not send request",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
     } finally {
       setSendingRequest((prev) => ({ ...prev, [userId]: false }));
     }

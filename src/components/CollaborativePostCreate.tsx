@@ -1,4 +1,4 @@
-import { useState, useRef, ChangeEvent } from "react";
+import { useEffect, useState, useRef, ChangeEvent } from "react";
 import { Users, X, Upload, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,12 +31,12 @@ export default function CollaborativePostCreate({ open, onClose, onPostCreated }
   const [loadingFriends, setLoadingFriends] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load friends when dialog opens
-  useState(() => {
+  useEffect(() => {
     if (open) {
+      setLoadingFriends(true);
       loadFriends();
     }
-  });
+  }, [open]);
 
   const loadFriends = async () => {
     const token = localStorage.getItem("supabaseToken");

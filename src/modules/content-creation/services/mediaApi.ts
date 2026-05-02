@@ -1,4 +1,6 @@
-const API_BASE = "http://localhost:3001/api/user";
+import { API_BASE } from "@/lib/apiBase";
+
+const USER_API_BASE = `${API_BASE}/api/user`;
 
 export type MediaPost = {
   post_id: string;
@@ -6,6 +8,8 @@ export type MediaPost = {
   content: string | null;
   media_url: string | null;
   media_type: string | null;
+  visibility?: string | null;
+  is_collaborative?: boolean | null;
   created_at: string;
   author?: {
     full_name: string | null;
@@ -31,7 +35,7 @@ export type MediaComment = {
 };
 
 export async function getMediaFeed(token: string) {
-  const res = await fetch(`${API_BASE}/media/feed`, {
+  const res = await fetch(`${USER_API_BASE}/media/feed`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return res.json();
@@ -41,7 +45,7 @@ export async function uploadPostMedia(file: File, token: string) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}/media/upload`, {
+  const res = await fetch(`${USER_API_BASE}/media/upload`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -66,7 +70,7 @@ export async function createMediaPost(
   },
   token: string,
 ) {
-  const res = await fetch(`${API_BASE}/media/posts`, {
+  const res = await fetch(`${USER_API_BASE}/media/posts`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -79,7 +83,7 @@ export async function createMediaPost(
 }
 
 export async function togglePostLike(postId: string, token: string) {
-  const res = await fetch(`${API_BASE}/media/posts/${encodeURIComponent(postId)}/like`, {
+  const res = await fetch(`${USER_API_BASE}/media/posts/${encodeURIComponent(postId)}/like`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -88,7 +92,7 @@ export async function togglePostLike(postId: string, token: string) {
 }
 
 export async function getPostComments(postId: string, token: string) {
-  const res = await fetch(`${API_BASE}/media/posts/${encodeURIComponent(postId)}/comments`, {
+  const res = await fetch(`${USER_API_BASE}/media/posts/${encodeURIComponent(postId)}/comments`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -96,7 +100,7 @@ export async function getPostComments(postId: string, token: string) {
 }
 
 export async function addPostComment(postId: string, comment_text: string, token: string) {
-  const res = await fetch(`${API_BASE}/media/posts/${encodeURIComponent(postId)}/comments`, {
+  const res = await fetch(`${USER_API_BASE}/media/posts/${encodeURIComponent(postId)}/comments`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

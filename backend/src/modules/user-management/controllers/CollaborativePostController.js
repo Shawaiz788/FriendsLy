@@ -16,6 +16,93 @@ const getUserIdFromToken = async (supabase, token) => {
   return { userId: userData.user.id, error: null };
 };
 
+const profileFields = "user_id, full_name, username, profile_photo_url";
+
+const getProfilesByUserId = async (supabase, userIds) => {
+  const uniqueUserIds = Array.from(new Set((userIds || []).filter(Boolean)));
+  if (uniqueUserIds.length === 0) return {};
+
+  const { data: profiles, error } = await supabase
+    .from("user_profiles")
+    .select(profileFields)
+    .in("user_id", uniqueUserIds);
+
+  if (error) {
+    console.error("Fetch profiles error:", error);
+    return {};
+  }
+
+  return Object.fromEntries(
+    (profiles || []).map((profile) => [
+      profile.user_id,
+      {
+        full_name: profile.full_name,
+        username: profile.username,
+        profile_photo_url: profile.profile_photo_url,
+      },
+    ])
+  );
+};
+
+const hydrateCollaborativePosts = async (supabase, posts) => {
+  const postRows = posts || [];
+  if (postRows.length === 0) return [];
+
+  const postIds = postRows.map((post) => post.post_id).filter(Boolean);
+  const authorIds = postRows.map((post) => post.user_id).filter(Boolean);
+
+  const [{ data: collaborators }, { data: likes }, { data: comments }] = await Promise.all([
+    supabase.from("post_collaborators").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_comments").select("comment_id, post_id, comment_text, user_id, created_at").in("post_id", postIds),
+  ]);
+
+  const profileIds = [
+    ...authorIds,
+    ...(collaborators || []).map((collaborator) => collaborator.user_id),
+    ...(comments || []).map((comment) => comment.user_id),
+  ];
+  const profilesByUserId = await getProfilesByUserId(supabase, profileIds);
+
+  const collaboratorsByPostId = {};
+  for (const collaborator of collaborators || []) {
+    const list = collaboratorsByPostId[collaborator.post_id] || [];
+    list.push({
+      user_id: collaborator.user_id,
+      user_profiles: profilesByUserId[collaborator.user_id] || null,
+    });
+    collaboratorsByPostId[collaborator.post_id] = list;
+  }
+
+  const likesByPostId = {};
+  for (const like of likes || []) {
+    const list = likesByPostId[like.post_id] || [];
+    list.push({ user_id: like.user_id });
+    likesByPostId[like.post_id] = list;
+  }
+
+  const commentsByPostId = {};
+  for (const comment of comments || []) {
+    const list = commentsByPostId[comment.post_id] || [];
+    list.push({
+      comment_id: comment.comment_id,
+      content: comment.comment_text,
+      user_id: comment.user_id,
+      created_at: comment.created_at,
+      user_profiles: profilesByUserId[comment.user_id] || null,
+    });
+    commentsByPostId[comment.post_id] = list;
+  }
+
+  return postRows.map((post) => ({
+    ...post,
+    user_profiles: profilesByUserId[post.user_id] || null,
+    post_collaborators: collaboratorsByPostId[post.post_id] || [],
+    post_likes: likesByPostId[post.post_id] || [],
+    post_comments: commentsByPostId[post.post_id] || [],
+  }));
+};
+
 // Create a new collaborative post
 export const createCollaborativePost = async (req, res) => {
   try {
@@ -91,25 +178,9 @@ export const createCollaborativePost = async (req, res) => {
       }
     }
 
-    // Fetch the complete post with collaborator info
-    const { data: completePost, error: fetchError } = await supabase
+    const { data: createdPost, error: fetchError } = await supabase
       .from("posts")
-      .select(`
-        *,
-        post_collaborators (
-          user_id,
-          user_profiles (
-            full_name,
-            username,
-            profile_photo_url
-          )
-        ),
-        user_profiles!posts_user_id_fkey (
-          full_name,
-          username,
-          profile_photo_url
-        )
-      `)
+      .select("*")
       .eq("post_id", postData.post_id)
       .single();
 
@@ -121,6 +192,8 @@ export const createCollaborativePost = async (req, res) => {
         message: "Post created successfully"
       });
     }
+
+    const [completePost] = await hydrateCollaborativePosts(supabase, [createdPost]);
 
     res.status(201).json({ 
       success: true, 
@@ -149,51 +222,45 @@ export const getCollaborativePosts = async (req, res) => {
       return res.status(401).json({ error: error || "Invalid token" });
     }
 
-    // Get posts where user is creator or collaborator
-    const { data: posts, error: fetchError } = await supabase
+    const { data: collaboratorRows, error: collaboratorFetchError } = await supabase
+      .from("post_collaborators")
+      .select("post_id")
+      .eq("user_id", userId);
+
+    if (collaboratorFetchError) {
+      console.error("Fetch collaborator post ids error:", collaboratorFetchError);
+      return res.status(500).json({ error: "Failed to fetch posts" });
+    }
+
+    const collaboratorPostIds = Array.from(
+      new Set((collaboratorRows || []).map((row) => row.post_id).filter(Boolean))
+    );
+
+    // Get posts where user is creator or collaborator. PostgREST cannot parse
+    // OR filters that cross embedded relations, so resolve collaborator ids first.
+    let postsQuery = supabase
       .from("posts")
-      .select(`
-        *,
-        post_collaborators!inner (
-          user_id,
-          user_profiles (
-            full_name,
-            username,
-            profile_photo_url
-          )
-        ),
-        user_profiles!posts_user_id_fkey (
-          full_name,
-          username,
-          profile_photo_url
-        ),
-        post_likes (
-          user_id
-        ),
-        post_comments (
-          comment_id,
-          content,
-          user_id,
-          created_at,
-          user_profiles (
-            full_name,
-            username,
-            profile_photo_url
-          )
-        )
-      `)
-      .eq("is_collaborative", true)
-      .or(`user_id.eq.${userId},post_collaborators.user_id.eq.${userId}`)
-      .order("created_at", { ascending: false });
+      .select("*")
+      .eq("is_collaborative", true);
+
+    if (collaboratorPostIds.length > 0) {
+      postsQuery = postsQuery.or(`user_id.eq.${userId},post_id.in.(${collaboratorPostIds.join(",")})`);
+    } else {
+      postsQuery = postsQuery.eq("user_id", userId);
+    }
+
+    const { data: posts, error: fetchError } = await postsQuery.order("created_at", { ascending: false });
 
     if (fetchError) {
       console.error("Fetch collaborative posts error:", fetchError);
       return res.status(500).json({ error: "Failed to fetch posts" });
     }
 
+    const hydratedPosts = await hydrateCollaborativePosts(supabase, posts || []);
+
     res.status(200).json({ 
       success: true, 
-      data: posts || []
+      data: hydratedPosts
     });
 
   } catch (error) {
@@ -252,14 +319,7 @@ export const addCollaborator = async (req, res) => {
         post_id: postId,
         user_id: collaboratorId,
       }])
-      .select(`
-        user_id,
-        user_profiles (
-          full_name,
-          username,
-          profile_photo_url
-        )
-      `)
+      .select("user_id")
       .single();
 
     if (addError) {
@@ -270,9 +330,14 @@ export const addCollaborator = async (req, res) => {
       return res.status(500).json({ error: "Failed to add collaborator" });
     }
 
+    const profilesByUserId = await getProfilesByUserId(supabase, [data.user_id]);
+
     res.status(200).json({ 
       success: true, 
-      data,
+      data: {
+        user_id: data.user_id,
+        user_profiles: profilesByUserId[data.user_id] || null,
+      },
       message: "Collaborator added successfully"
     });
 
@@ -381,22 +446,7 @@ export const updateCollaborativePost = async (req, res) => {
       .from("posts")
       .update(updateData)
       .eq("post_id", postId)
-      .select(`
-        *,
-        post_collaborators (
-          user_id,
-          user_profiles (
-            full_name,
-            username,
-            profile_photo_url
-          )
-        ),
-        user_profiles!posts_user_id_fkey (
-          full_name,
-          username,
-          profile_photo_url
-        )
-      `)
+      .select("*")
       .single();
 
     if (updateError) {
@@ -404,9 +454,11 @@ export const updateCollaborativePost = async (req, res) => {
       return res.status(500).json({ error: "Failed to update post" });
     }
 
+    const [completePost] = await hydrateCollaborativePosts(supabase, [updatedPost]);
+
     res.status(200).json({ 
       success: true, 
-      data: updatedPost,
+      data: completePost,
       message: "Post updated successfully"
     });
 

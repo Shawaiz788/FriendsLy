@@ -1,6 +1,5 @@
 import type { IntentPreferences } from "@/modules/intent-aura/services/intentPreferences";
-
-const API_BASE = "http://localhost:3001";
+import { API_BASE } from "@/lib/apiBase";
 
 export async function getMyIntentPreferences(token: string) {
   try {

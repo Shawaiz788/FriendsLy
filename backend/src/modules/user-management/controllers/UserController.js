@@ -10,20 +10,66 @@ const createAuthenticatedClient = async (token) => {
   });
 };
 
+const formatSupabaseError = (error, fallbackMessage) => {
+  if (!error) return fallbackMessage;
+
+  switch (error.code) {
+    case '42P01':
+      return 'Required table is missing. Apply the latest schema.sql to Supabase.';
+    case '42703':
+      return 'Required column is missing. Apply the latest schema.sql to Supabase.';
+    case '42501':
+      return 'Operation blocked by RLS. Add/update policies or use the service role key.';
+    default:
+      return error.message || fallbackMessage;
+  }
+};
+
+const adminSignOutUser = async (adminSupabase, userId) => {
+  if (!adminSupabase || !userId) return null;
+
+  let lastError = null;
+  const attempts = [
+    () => adminSupabase.auth.admin.signOut(userId, { scope: 'global' }),
+    () => adminSupabase.auth.admin.signOut(userId, 'global'),
+    () => adminSupabase.auth.admin.signOut(userId),
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt();
+      if (!result?.error) return null;
+
+      lastError = result.error;
+      const message = String(result.error.message || '');
+      if (!message.toLowerCase().includes('scope')) {
+        return lastError;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  return lastError;
+};
+
 const UserController = {
     async checkUsernameAvailability(req, res) {
       const supabase = getSupabase(req);
-      const { username } = req.query;
-      if (!username) {
+      const rawUsername = req.query.username;
+      const normalized = typeof rawUsername === 'string' ? rawUsername.trim() : '';
+      if (!normalized) {
         return res.status(400).json({ error: 'Username is required' });
       }
-      const { data, error } = await supabase.from('user_profiles').select('username').eq('username', username);
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('username')
+        .ilike('username', normalized)
+        .limit(1);
+
       if (error) return res.status(500).json({ error: error.message });
-      if (data && data.length > 0) {
-        return res.json({ available: false });
-      } else {
-        return res.json({ available: true });
-      }
+      return res.json({ available: !data || data.length === 0 });
     },
   async uploadImage(req, res) {
     const supabase = getSupabase(req);
@@ -377,17 +423,84 @@ const UserController = {
   },
   async deactivateAccount(req, res) {
     const supabase = getSupabase(req);
-    const { id } = req.body;
-    const { error } = await supabase.from('user_profiles').update({ isActive: false }).eq('id', id);
-    if (error) return res.status(400).json({ error: error.message });
-    res.json({ success: true });
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const adminSupabase = serviceRoleKey
+        ? (await import('@supabase/supabase-js')).createClient(process.env.SUPABASE_URL, serviceRoleKey)
+        : null;
+      const client = adminSupabase || authenticatedSupabase;
+
+      const { error: updateError } = await client
+        .from('users')
+        .update({ account_status: 'deactivated', updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
+
+      if (updateError) {
+        return res.status(400).json({ error: formatSupabaseError(updateError, 'Deactivation failed') });
+      }
+
+      if (adminSupabase) {
+        const signOutError = await adminSignOutUser(adminSupabase, userId);
+        if (signOutError) {
+          console.log('Sign out error during deactivation:', signOutError);
+        }
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Deactivation failed' });
+    }
   },
   async deleteAccount(req, res) {
     const supabase = getSupabase(req);
-    const { id } = req.body;
-    const { error } = await supabase.from('user_profiles').update({ deleted: true }).eq('id', id);
-    if (error) return res.status(400).json({ error: error.message });
-    res.json({ success: true });
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceRoleKey) {
+      return res.status(500).json({
+        error: 'Missing SUPABASE_SERVICE_ROLE_KEY in backend env. Add it to backend/.env and restart the backend.',
+      });
+    }
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const adminSupabase = createClient(process.env.SUPABASE_URL, serviceRoleKey);
+
+      const signOutError = await adminSignOutUser(adminSupabase, userId);
+      if (signOutError) {
+        console.log('Sign out error during deletion:', signOutError);
+      }
+
+      const { error: deleteAuthError } = await adminSupabase.auth.admin.deleteUser(userId);
+      if (deleteAuthError) {
+        return res.status(400).json({ error: formatSupabaseError(deleteAuthError, 'Delete failed') });
+      }
+
+      const { error: deleteUserError } = await adminSupabase
+        .from('users')
+        .delete()
+        .eq('user_id', userId);
+      if (deleteUserError) {
+        return res.status(400).json({ error: formatSupabaseError(deleteUserError, 'Delete failed') });
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Delete failed' });
+    }
   },
   async downloadData(req, res) {
     const supabase = getSupabase(req);

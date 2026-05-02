@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { editProfile, logoutAllSessions, logoutCurrentSession, updateMyLocation } from "@/lib/api";
+import { deactivateAccount, deleteAccount, editProfile, logoutAllSessions, logoutCurrentSession, updateMyLocation } from "@/lib/api";
 
 async function fetchProfile(token) {
   // Get user id from token
@@ -79,6 +79,12 @@ const ProfilePage = () => {
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deactivateLoading, setDeactivateLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deactivateError, setDeactivateError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [downloadSelection, setDownloadSelection] = useState({
     profile: true,
     intent: true,
@@ -640,6 +646,62 @@ const ProfilePage = () => {
     }
   };
 
+  const handleDeactivateAccount = async () => {
+    setDeactivateLoading(true);
+    setDeactivateError("");
+
+    if (!token) {
+      setDeactivateError("Please log in first.");
+      setDeactivateLoading(false);
+      return;
+    }
+
+    try {
+      const result = await deactivateAccount(token);
+      if (result?.error) {
+        setDeactivateError(result.error);
+        return;
+      }
+    } catch (err) {
+      setDeactivateError(err instanceof Error ? err.message : "Deactivation failed");
+      return;
+    } finally {
+      setDeactivateLoading(false);
+      setDeactivateDialogOpen(false);
+    }
+
+    clearLocalSession();
+    navigate("/");
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    setDeleteError("");
+
+    if (!token) {
+      setDeleteError("Please log in first.");
+      setDeleteLoading(false);
+      return;
+    }
+
+    try {
+      const result = await deleteAccount(token);
+      if (result?.error) {
+        setDeleteError(result.error);
+        return;
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+      return;
+    } finally {
+      setDeleteLoading(false);
+      setDeleteDialogOpen(false);
+    }
+
+    clearLocalSession();
+    navigate("/");
+  };
+
   const toggleDownloadKey = (key: keyof typeof downloadSelection) => {
     setDownloadSelection((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -984,7 +1046,14 @@ const ProfilePage = () => {
             <CardTitle className="text-lg">Account</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button variant="outline" className="w-full justify-start">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => {
+                setDeactivateError("");
+                setDeactivateDialogOpen(true);
+              }}
+            >
               <UserX className="w-4 h-4" /> Deactivate account
             </Button>
             <Button
@@ -1000,7 +1069,14 @@ const ProfilePage = () => {
             <Button variant="outline" className="w-full justify-start" onClick={() => setLogoutDialogOpen(true)}>
               <LogOut className="w-4 h-4" /> Log out
             </Button>
-            <Button variant="destructive" className="w-full justify-start">
+            <Button
+              variant="destructive"
+              className="w-full justify-start"
+              onClick={() => {
+                setDeleteError("");
+                setDeleteDialogOpen(true);
+              }}
+            >
               <Trash2 className="w-4 h-4" /> Delete account
             </Button>
           </CardContent>
@@ -1074,6 +1150,50 @@ const ProfilePage = () => {
             </Button>
             <Button type="button" variant="destructive" onClick={() => void handleLogoutAll()} disabled={logoutLoading}>
               {logoutLoading ? "Logging out..." : "All devices"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deactivateDialogOpen} onOpenChange={setDeactivateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate account</DialogTitle>
+            <DialogDescription>
+              Your account will be deactivated and you will be logged out. You can reactivate by logging in again.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deactivateError && <p className="text-sm text-destructive">{deactivateError}</p>}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeactivateDialogOpen(false)} disabled={deactivateLoading}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeactivateAccount} disabled={deactivateLoading}>
+              {deactivateLoading ? "Deactivating..." : "Deactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete account permanently</DialogTitle>
+            <DialogDescription>
+              This action is permanent and cannot be undone. All your data will be removed.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeleteAccount} disabled={deleteLoading}>
+              {deleteLoading ? "Deleting..." : "Delete permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>

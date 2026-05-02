@@ -18,7 +18,7 @@ async function parseResponse(res: Response) {
 }
 
 export async function checkUsernameAvailability(username: string) {
-  const res = await fetch(`${API_BASE}/check-username?username=${encodeURIComponent(username)}`);
+  const res = await fetch(`${API_BASE}/api/user/check-username?username=${encodeURIComponent(username)}`);
   return res.json();
 }
 
@@ -190,6 +190,26 @@ export async function logoutCurrentSession(token: string) {
 export async function logoutAllSessions(token: string) {
   const res = await fetch(`${API_BASE}/api/user/logoutAll`, {
     method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return parseResponse(res);
+}
+
+export async function deactivateAccount(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/deactivate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return parseResponse(res);
+}
+
+export async function deleteAccount(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/delete`, {
+    method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
     },

@@ -8,7 +8,7 @@ export * from "@/modules/location-suggestion/services/locationApi";
 export * from "@/modules/content-creation/services/mediaApi";
 // Check if username is available
 export async function checkUsernameAvailability(username: string) {
-  const res = await fetch(`http://localhost:3001/check-username?username=${encodeURIComponent(username)}`);
+  const res = await fetch(`http://localhost:3001/api/user/check-username?username=${encodeURIComponent(username)}`);
   return res.json();
 }
 

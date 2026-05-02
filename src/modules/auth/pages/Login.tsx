@@ -29,14 +29,14 @@ const Login = () => {
           
           // Fetch and cache profile data immediately so it's ready when navigating to profile
           try {
-            const resUser = await fetch("http://localhost:3001/api/user/me", {
+            const resUser = await fetch("http://localhost:3002/api/user/me", {
               headers: { "Authorization": `Bearer ${session.access_token}` },
             });
             const userJson = await resUser.json();
             const userId = userJson?.user?.id;
             
             if (userId) {
-              const res = await fetch(`http://localhost:3001/api/user/download?id=${userId}`, {
+              const res = await fetch(`http://localhost:3002/api/user/download?id=${userId}`, {
                 headers: { "Authorization": `Bearer ${session.access_token}` },
               });
               const profileData = await res.json();

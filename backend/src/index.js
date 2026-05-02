@@ -10,7 +10,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: 'http://localhost:8080', credentials: true }));
+app.use(cors({
+  origin: ['http://localhost:8080', 'http://localhost:8081', 'http://localhost:5173', 'http://127.0.0.1:8080', 'http://127.0.0.1:8081', 'http://127.0.0.1:5173'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Setup multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -124,6 +129,34 @@ app.post('/api/user/upload-image', upload.single('file'), async (req, res) => {
 });
 
 app.use('/api/user', userRoutes);
+
+// Automatic cleanup of expired stories (runs every hour)
+const cleanupExpiredStories = async () => {
+	try {
+		const { createClient } = await import('@supabase/supabase-js');
+		const adminSupabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+		
+		const now = new Date().toISOString();
+		const { error } = await adminSupabase
+			.from('stories')
+			.delete()
+			.lt('expires_at', now);
+			
+		if (error) {
+			console.log('Error cleaning up expired stories:', error.message);
+		} else {
+			console.log('✅ Cleaned up expired stories');
+		}
+	} catch (err) {
+		console.log('Exception during story cleanup:', err.message);
+	}
+};
+
+// Run cleanup every hour (3600000 ms)
+setInterval(cleanupExpiredStories, 3600000);
+
+// Run cleanup once on startup
+cleanupExpiredStories();
 
 app.listen(process.env.PORT || 3001, () => {
 	console.log('Backend running on port ' + (process.env.PORT || 3001));

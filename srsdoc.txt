@@ -27,12 +27,12 @@ FR16: The system shall analyze intent and proximity patterns. (DONE)
  FR19: The system shall log suggestion reasoning for transparency. (DONE)
 
 3.5 Content Creation & Sharing
- FR20: The system shall support 24-hour ephemeral stories.
+ FR20: The system shall support 24-hour ephemeral stories. (DONE)
  FR21: The system shall allow photo posts.(DONE)
  FR22: The system shall allow video posts.(DONE)
  FR23: The system shall allow short text micro-blog posts.(DONE)
  FR24: The system shall provide privacy controls (friends-only, close friends, public).
- FR25: The system shall support collaborative posts.
+ FR25: The system shall support collaborative posts. (DONE)
 
 3.6 Interaction & Communication
 FR26: The system shall support voice notes in chat.(DONE)

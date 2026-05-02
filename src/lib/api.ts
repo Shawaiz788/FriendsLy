@@ -8,7 +8,7 @@ export * from "@/modules/location-suggestion/services/locationApi";
 export * from "@/modules/content-creation/services/mediaApi";
 // Check if username is available
 export async function checkUsernameAvailability(username: string) {
-  const res = await fetch(`http://localhost:3001/api/user/check-username?username=${encodeURIComponent(username)}`);
+  const res = await fetch(`http://localhost:3002/api/user/check-username?username=${encodeURIComponent(username)}`);
   return res.json();
 }
 
@@ -18,7 +18,7 @@ export async function uploadProfileImage(file: File, userId: string, token: stri
   formData.append('file', file);
   formData.append('userId', userId);
   
-  const res = await fetch('http://localhost:3001/api/user/upload-image', {
+  const res = await fetch('http://localhost:3002/api/user/upload-image', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -31,7 +31,7 @@ export async function uploadProfileImage(file: File, userId: string, token: stri
 // Check if username is available
 // API helpers for registration and login
 export async function registerUser({ name, username, email, phone, password, date_of_birth, gender }) {
-  const res = await fetch('http://localhost:3001/register', {
+  const res = await fetch('http://localhost:3002/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -46,16 +46,30 @@ export async function registerUser({ name, username, email, phone, password, dat
       gender
     })
   });
-  return res.json();
+  
+  const data = await res.json();
+  
+  if (!res.ok) {
+    return { error: data.error || data.message || 'Registration failed', user: null };
+  }
+  
+  return { error: null, user: data.user };
 }
 
 export async function loginUser({ email, password }) {
-  const res = await fetch('http://localhost:3001/login', {
+  const res = await fetch('http://localhost:3002/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
   });
-  return res.json();
+  
+  const data = await res.json();
+  
+  if (!res.ok) {
+    return { error: data.error || data.message || 'Login failed', session: null, user: null };
+  }
+  
+  return { error: null, session: data.session, user: data.user };
 }
 
 // Note: Friend-related functions are now imported from module service files above
@@ -64,7 +78,7 @@ export async function loginUser({ email, password }) {
 // from @/modules/friends-interaction/services/friendsApi
 
 export async function editProfile({ name, username, photo, interests, date_of_birth, gender, token }) {
-  const res = await fetch('http://localhost:3001/api/user/profile', {
+  const res = await fetch('http://localhost:3002/api/user/profile', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -76,7 +90,7 @@ export async function editProfile({ name, username, photo, interests, date_of_bi
 }
 
 export async function getUserProfile(userId: string, token: string) {
-  const res = await fetch(`http://localhost:3001/api/user/${userId}/profile`, {
+  const res = await fetch(`http://localhost:3002/api/user/${userId}/profile`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
   return res.json();
@@ -86,7 +100,7 @@ export async function updateMyLocation(
   { latitude, longitude }: { latitude: number; longitude: number },
   token: string,
 ) {
-  const res = await fetch('http://localhost:3001/api/user/location', {
+  const res = await fetch('http://localhost:3002/api/user/location', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -107,7 +121,7 @@ export async function updateMyLocation(
 }
 
 export async function getFriendsLocations(token: string) {
-  const res = await fetch('http://localhost:3001/api/user/friends/locations', {
+  const res = await fetch('http://localhost:3002/api/user/friends/locations', {
     headers: { 'Authorization': `Bearer ${token}` },
   });
 
@@ -120,4 +134,121 @@ export async function getFriendsLocations(token: string) {
       error: responseText || `Request failed with status ${res.status}`,
     };
   }
+}
+
+// Story API functions
+export async function uploadStoryMedia(file: File, token: string) {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const res = await fetch('http://localhost:3002/api/user/stories/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData
+  });
+  return res.json();
+}
+
+export async function createStory(mediaUrl: string, mediaType: string, visibility: string, token: string) {
+  const res = await fetch('http://localhost:3002/api/user/stories', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      media_url: mediaUrl,
+      media_type: mediaType,
+      visibility: visibility || 'friends'
+    })
+  });
+  return res.json();
+}
+
+export async function getStories(token: string) {
+  const res = await fetch('http://localhost:3002/api/user/stories', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+export async function deleteStory(storyId: string, token: string) {
+  const res = await fetch(`http://localhost:3002/api/user/stories/${storyId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+// Collaborative Posts API functions
+export async function createCollaborativePost(data: {
+  content?: string;
+  media_url?: string;
+  media_type?: string;
+  visibility?: string;
+  collaborators?: string[];
+}, token: string) {
+  const res = await fetch('http://localhost:3002/api/user/collaborative-posts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+export async function getCollaborativePosts(token: string) {
+  const res = await fetch('http://localhost:3002/api/user/collaborative-posts', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+export async function updateCollaborativePost(postId: string, data: {
+  content?: string;
+  media_url?: string;
+  media_type?: string;
+  visibility?: string;
+}, token: string) {
+  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+export async function deleteCollaborativePost(postId: string, token: string) {
+  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+export async function addCollaborator(postId: string, userId: string, token: string) {
+  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}/collaborators`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ userId })
+  });
+  return res.json();
+}
+
+export async function removeCollaborator(postId: string, userId: string, token: string) {
+  const res = await fetch(`http://localhost:3002/api/user/collaborative-posts/${postId}/collaborators/${userId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
 }

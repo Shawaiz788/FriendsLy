@@ -3,6 +3,15 @@ import multer from 'multer';
 import UserController from '../controllers/UserController.js';
 import HangoutController from '../controllers/HangoutController.js';
 import MediaController from '../controllers/MediaController.js';
+import StoryController from '../controllers/StoryController.js';
+import {
+  createCollaborativePost,
+  getCollaborativePosts,
+  addCollaborator,
+  removeCollaborator,
+  updateCollaborativePost,
+  deleteCollaborativePost
+} from '../controllers/CollaborativePostController.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -88,6 +97,20 @@ router.post('/media/posts', requireAuth, MediaController.createPost);
 router.post('/media/posts/:postId/like', requireAuth, MediaController.toggleLike);
 router.get('/media/posts/:postId/comments', requireAuth, MediaController.getComments);
 router.post('/media/posts/:postId/comments', requireAuth, MediaController.addComment);
+
+// Stories (24-hour ephemeral content)
+router.get('/stories', requireAuth, StoryController.getStories);
+router.post('/stories/upload', requireAuth, upload.single('file'), StoryController.uploadStoryMedia);
+router.post('/stories', requireAuth, StoryController.createStory);
+router.delete('/stories/:storyId', requireAuth, StoryController.deleteStory);
+
+// Collaborative Posts
+router.get('/collaborative-posts', requireAuth, getCollaborativePosts);
+router.post('/collaborative-posts', requireAuth, createCollaborativePost);
+router.put('/collaborative-posts/:postId', requireAuth, updateCollaborativePost);
+router.delete('/collaborative-posts/:postId', requireAuth, deleteCollaborativePost);
+router.post('/collaborative-posts/:postId/collaborators', requireAuth, addCollaborator);
+router.delete('/collaborative-posts/:postId/collaborators/:userId', requireAuth, removeCollaborator);
 
 router.get('/capsules/:capsuleId', requireAuth, HangoutController.getCapsuleDetails);
 router.post('/capsules/:capsuleId/reflections', requireAuth, HangoutController.addCapsuleReflection);

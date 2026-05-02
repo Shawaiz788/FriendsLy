@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Test</title>
+</head>
+<body>
+    <h1>Authentication Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testAuth() {
+            const results = document.getElementById('results');
+            
+            // Test registration
+            try {
+                const registerResponse = await fetch('http://localhost:3001/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'test3@example.com',
+                        password: 'test123',
+                        name: 'Test User 3',
+                        username: 'testuser3',
+                        phone: '',
+                        photo: '',
+                        interests: '',
+                        date_of_birth: '',
+                        gender: ''
+                    })
+                });
+                
+                const registerData = await registerResponse.json();
+                results.innerHTML += '<h2>Registration:</h2><pre>' + JSON.stringify(registerData, null, 2) + '</pre>';
+                
+                // Test login
+                const loginResponse = await fetch('http://localhost:3001/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'test3@example.com',
+                        password: 'test123'
+                    })
+                });
+                
+                const loginData = await loginResponse.json();
+                results.innerHTML += '<h2>Login:</h2><pre>' + JSON.stringify(loginData, null, 2) + '</pre>';
+                
+                if (loginData.session?.access_token) {
+                    results.innerHTML += '<h2>✅ Authentication Working!</h2>';
+                }
+                
+            } catch (error) {
+                results.innerHTML += '<h2>❌ Error:</h2><pre>' + error.message + '</pre>';
+            }
+        }
+        
+        testAuth();
+    </script>
+</body>
+</html>

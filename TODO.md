@@ -1,19 +1,16 @@
-# Fix Stories Tab - Hide Expired Stories
+# Media & Stories Merge + Unified Post Creation TODO
 
-**Status: In Progress**
+## Planned Steps:
+- [x] 1. Update BottomNav.tsx: Remove Stories tab from navItems
+- [x] 2. Update App.tsx: Remove /stories route  
+- [x] 3. Refactor MediaPage.tsx: 
+  - Add stories section at top (loadStories, stories list with thumbnails/timer)
+  - Add StoryUpload and StoryDisplay modals
+  - Remove inline post form
+  - Replace with single "Create Post" button -> CollaborativePostCreate (unified)
+- [x] 4. Generalize CollaborativePostCreate.tsx for normal/collaborative posts (collaborators optional)
+- [x] 5. Delete StoriesPage.tsx
+- [x] 6. Test Media tab: stories top, posts below, unified post creation with text/media/visibility/collaborators
+- [x] 7. Mark complete
 
-## Plan Breakdown
-1. ✅ [Complete] Understand codebase (StoryController.js, StoriesPage.tsx, schema.sql)
-2. ✅ [Complete] Confirm plan with user (client-side filter + auto-refresh)
-3. ✅ Edit src/modules/content-creation/pages/StoriesPage.tsx 
-   - Add activeStories filter
-   - Update counts/rendering
-   - Fix formatTimeRemaining
-   - Add 5min auto-refresh
-4. ✅ Edit src/components/StoryDisplay.tsx
-   - Filter stories on load
-   - Fix formatTimeRemaining
-5. [ ] Test: Create story → verify hides after expiry
-6. [ ] Update this TODO.md
-
-**Next Step:** Edit StoriesPage.tsx
+**Current progress: Starting step 1**

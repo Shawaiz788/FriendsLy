@@ -40,7 +40,7 @@ const App = () => (
           <Route path="/search" element={<SearchPage />} />
           <Route path="/social" element={<SocialPage />} />
           <Route path="/media" element={<MediaPage />} />
-          <Route path="/stories" element={<StoriesPage />} />
+
           <Route path="/collaborative" element={<Navigate to="/media" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/user/:userId" element={<UserProfilePage />} />

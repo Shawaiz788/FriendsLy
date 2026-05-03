@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createCollaborativePost, getAcceptedFriends } from "@/lib/api";
+import { getAcceptedFriends } from "@/lib/api";
+import { uploadPostMedia, createMediaPost } from "@/modules/content-creation/services/mediaApi";
 import { toast } from "@/hooks/use-toast";
 
-interface CollaborativePostCreateProps {
+interface PostCreateProps {
   open: boolean;
   onClose: () => void;
   onPostCreated: () => void;
@@ -20,11 +21,11 @@ interface Friend {
   profile_photo_url?: string;
 }
 
-export default function CollaborativePostCreate({ open, onClose, onPostCreated }: CollaborativePostCreateProps) {
+export default function PostCreate({ open, onClose, onPostCreated }: PostCreateProps) {
   const [content, setContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [visibility, setVisibility] = useState<string>("friends");
+  const [visibility, setVisibility] = useState<"friends" | "close_friends" | "public">("friends");
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(false);
@@ -110,12 +111,10 @@ export default function CollaborativePostCreate({ open, onClose, onPostCreated }
 
     setLoading(true);
     try {
-      let mediaUrl = undefined;
-      let mediaType = undefined;
+      let mediaUrl: string | undefined;
+      let mediaType: string | undefined;
 
       if (selectedFile) {
-        // Upload media first (using existing uploadPostMedia function)
-        const { uploadPostMedia } = await import("@/lib/api");
         const uploadResult = await uploadPostMedia(selectedFile, token);
         if (!uploadResult?.url) {
           toast({
@@ -128,18 +127,16 @@ export default function CollaborativePostCreate({ open, onClose, onPostCreated }
         mediaType = selectedFile.type.startsWith("video/") ? "video" : "image";
       }
 
-      // Create collaborative post
-      const result = await createCollaborativePost({
-        content: content.trim() || undefined,
+      const result = await createMediaPost({
+        content: content.trim(),
         media_url: mediaUrl,
         media_type: mediaType,
         visibility,
-        collaborators: collaborators.length > 0 ? collaborators : undefined,
       }, token);
       
       if (result?.success) {
         toast({ 
-          title: "Collaborative post created", 
+          title: "Post created", 
           description: "Your post has been created successfully." 
         });
         onPostCreated();
@@ -179,7 +176,7 @@ export default function CollaborativePostCreate({ open, onClose, onPostCreated }
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Collaborative Post</DialogTitle>
+          <DialogTitle>Create Post</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
@@ -255,7 +252,7 @@ export default function CollaborativePostCreate({ open, onClose, onPostCreated }
           {/* Visibility */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Visibility</label>
-            <Select value={visibility} onValueChange={setVisibility}>
+            <Select value={visibility} onValueChange={(value) => setVisibility(value as typeof visibility)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -267,11 +264,11 @@ export default function CollaborativePostCreate({ open, onClose, onPostCreated }
             </Select>
           </div>
 
-          {/* Collaborators */}
+          {/* Collaborators (Optional) */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4" />
-              <label className="text-sm font-medium">Collaborators</label>
+              <label className="text-sm font-medium">Collaborators (Optional)</label>
               <span className="text-xs text-muted-foreground">
                 ({collaborators.length} selected)
               </span>

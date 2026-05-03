@@ -190,7 +190,12 @@ const uploadToPostMediaBucket = async (file, userId, capsuleId) => {
     throw new Error('Failed to get public URL');
   }
 
-  const mediaType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
+  let mediaType = 'image';
+  if (file.mimetype?.startsWith('video/')) {
+    mediaType = 'video';
+  } else if (file.mimetype?.startsWith('audio/')) {
+    mediaType = 'audio';
+  }
   return { url: publicUrlData.publicUrl, mediaType };
 };
 
@@ -314,6 +319,18 @@ const parseMessagePayload = (rawPayload) => {
   }
 
   return { kind: 'text', text: String(rawPayload) };
+};
+
+const formatHangoutSchedule = (scheduledTime) => {
+  if (!scheduledTime) return { scheduled_date: null, scheduled_time: null };
+  const dateObj = new Date(scheduledTime);
+  if (Number.isNaN(dateObj.getTime())) return { scheduled_date: null, scheduled_time: null };
+
+  const iso = dateObj.toISOString();
+  return {
+    scheduled_date: iso.slice(0, 10),
+    scheduled_time: iso.slice(11, 19),
+  };
 };
 
 const HangoutController = {
@@ -1141,6 +1158,46 @@ const HangoutController = {
       if (membershipError) throw membershipError;
       if (!membership) return res.status(403).json({ error: 'You are not part of this hangout capsule' });
 
+      const { data: hangout, error: hangoutError } = await supabase
+        .from('hangouts')
+        .select('hangout_id, title, description, scheduled_time, location, status, created_at, hangout_intents(name)')
+        .eq('hangout_id', capsule.hangout_id)
+        .single();
+
+      if (hangoutError) throw hangoutError;
+
+      const { data: participants, error: participantsError } = await supabase
+        .from('hangout_participants')
+        .select('user_id, status')
+        .eq('hangout_id', capsule.hangout_id);
+
+      if (participantsError) throw participantsError;
+
+      const participantIds = Array.from(new Set((participants || []).map((row) => row.user_id)));
+      let participantProfiles = [];
+      if (participantIds.length) {
+        const { data, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('user_id, full_name, username, profile_photo_url')
+          .in('user_id', participantIds);
+
+        if (profilesError) throw profilesError;
+        participantProfiles = data || [];
+      }
+
+      const participantProfileById = Object.fromEntries(
+        (participantProfiles || []).map((row) => [row.user_id, row]),
+      );
+
+      const participantData = (participants || []).map((row) => ({
+        user_id: row.user_id,
+        status: row.status,
+        profile: participantProfileById[row.user_id] || null,
+      }));
+
+      const attendees = participantData.filter((row) => row.status === 'accepted');
+      const scheduleInfo = formatHangoutSchedule(hangout?.scheduled_time);
+
       // Fetch media
       const { data: media, error: mediaError } = await supabase
         .from('capsule_media')
@@ -1204,7 +1261,27 @@ const HangoutController = {
         author: reflectionProfileByUserId[reflection.user_id] || null,
       }));
 
-      return res.json({ data: { ...capsule, media: mediaData, reflections: reflectionData } });
+      return res.json({
+        data: {
+          ...capsule,
+          hangout: {
+            hangout_id: hangout.hangout_id,
+            title: hangout.title,
+            description: hangout.description,
+            status: hangout.status,
+            created_at: hangout.created_at,
+            hangout_type: hangout?.hangout_intents?.name || 'Hangout',
+            scheduled_time: hangout.scheduled_time,
+            scheduled_date: scheduleInfo.scheduled_date,
+            scheduled_time_of_day: scheduleInfo.scheduled_time,
+            location: hangout.location,
+            participants: participantData,
+            attendees,
+          },
+          media: mediaData,
+          reflections: reflectionData,
+        },
+      });
     } catch (error) {
       if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Capsule tables are missing. Apply schema.sql to your database.' });
@@ -1280,8 +1357,8 @@ const HangoutController = {
       return res.status(400).json({ error: 'media_url is required' });
     }
 
-    if (!['image', 'video'].includes(media_type)) {
-      return res.status(400).json({ error: "media_type must be 'image' or 'video'" });
+    if (!['image', 'video', 'audio'].includes(media_type)) {
+      return res.status(400).json({ error: "media_type must be 'image', 'video', or 'audio'" });
     }
 
     try {

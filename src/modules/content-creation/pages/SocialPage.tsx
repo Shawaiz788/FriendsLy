@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  addCapsuleReflection,
   addCapsuleMedia,
   deleteCapsuleMedia,
   getCapsuleDetails,
@@ -113,10 +114,36 @@ type CapsuleMedia = {
   } | null;
 };
 
+type CapsuleReflection = {
+  reflection_id: string;
+  user_id: string;
+  reflection_text: string;
+  created_at: string;
+  author: {
+    full_name?: string;
+    username?: string;
+  } | null;
+};
+
 type CapsuleDetails = {
   capsule_id: string;
   summary: string;
   media?: CapsuleMedia[];
+  reflections?: CapsuleReflection[];
+  hangout?: {
+    hangout_id: string;
+    title?: string | null;
+    description?: string | null;
+    status?: string | null;
+    created_at?: string | null;
+    hangout_type?: string | null;
+    scheduled_time?: string | null;
+    scheduled_date?: string | null;
+    scheduled_time_of_day?: string | null;
+    location?: unknown;
+    participants?: HangoutParticipant[];
+    attendees?: HangoutParticipant[];
+  };
 };
 
 const SocialPage = () => {
@@ -147,6 +174,8 @@ const SocialPage = () => {
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [sendingPoll, setSendingPoll] = useState(false);
   const [uploadingCapsuleMedia, setUploadingCapsuleMedia] = useState(false);
+  const [reflectionDraft, setReflectionDraft] = useState("");
+  const [sendingReflection, setSendingReflection] = useState(false);
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
   const [activeCapsuleMedia, setActiveCapsuleMedia] = useState<CapsuleMedia | null>(null);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
@@ -186,6 +215,43 @@ const SocialPage = () => {
     } catch {
       return "";
     }
+  };
+
+  const formatDate = (isoDate: string) => {
+    try {
+      return new Date(isoDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return "";
+    }
+  };
+
+  const formatLocation = (location: unknown) => {
+    if (!location) return "";
+    if (typeof location === "string") return location;
+    if (Array.isArray(location) && location.length >= 2) {
+      const [lat, lng] = location as number[];
+      if (typeof lat === "number" && typeof lng === "number") {
+        return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      }
+    }
+
+    if (typeof location === "object") {
+      const loc = location as {
+        x?: number;
+        y?: number;
+        lat?: number;
+        lng?: number;
+        latitude?: number;
+        longitude?: number;
+      };
+      const lat = loc.lat ?? loc.latitude ?? loc.y;
+      const lng = loc.lng ?? loc.longitude ?? loc.x;
+      if (typeof lat === "number" && typeof lng === "number") {
+        return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      }
+    }
+
+    return "";
   };
 
   const loadGroupMessages = async (groupId: string, authToken: string, setLoadingState = true) => {
@@ -692,8 +758,8 @@ const SocialPage = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      toast({ title: "Invalid file", description: "Please select an image or video file." });
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !file.type.startsWith("audio/")) {
+      toast({ title: "Invalid file", description: "Please select an image, video, or audio file." });
       return;
     }
 
@@ -720,9 +786,11 @@ const SocialPage = () => {
       }
 
       const mediaType =
-        uploadResult.media_type === "video" || capsuleMediaFile.type.startsWith("video/")
+        capsuleMediaFile.type.startsWith("video/") || uploadResult.media_type === "video"
           ? "video"
-          : "image";
+          : capsuleMediaFile.type.startsWith("audio/")
+            ? "audio"
+            : "image";
       const addResult = await addCapsuleMedia(
         selectedHangout.capsule.capsule_id,
         { mediaUrl: uploadResult.url, mediaType },
@@ -761,6 +829,36 @@ const SocialPage = () => {
     }
   };
 
+  const handleAddReflection = async () => {
+    if (!token || !selectedHangout?.capsule?.capsule_id) return;
+    const nextText = reflectionDraft.trim();
+    if (!nextText) return;
+
+    setSendingReflection(true);
+    try {
+      const result = await addCapsuleReflection(selectedHangout.capsule.capsule_id, nextText, token);
+      if (!result?.success) {
+        toast({
+          title: "Reflection failed",
+          description: result?.error || "Could not add reflection.",
+        });
+        return;
+      }
+
+      if (result?.data) {
+        setCapsuleDetails((prev) => {
+          if (!prev) return prev;
+          const nextReflections = [result.data, ...(prev.reflections || [])];
+          return { ...prev, reflections: nextReflections };
+        });
+      }
+
+      setReflectionDraft("");
+    } finally {
+      setSendingReflection(false);
+    }
+  };
+
   const handleDeleteCapsuleMedia = async (mediaId: string) => {
     if (!token || !selectedHangout?.capsule?.capsule_id) return;
 
@@ -785,7 +883,7 @@ const SocialPage = () => {
       if (!response.ok) throw new Error("Failed to download media");
 
       const blob = await response.blob();
-      const extension = item.media_type === "video" ? "mp4" : "jpg";
+      const extension = item.media_type === "video" ? "mp4" : item.media_type === "audio" ? "webm" : "jpg";
       const fileName = `capsule-${item.media_id}.${extension}`;
       const objectUrl = URL.createObjectURL(blob);
 
@@ -1218,6 +1316,59 @@ const SocialPage = () => {
 
                     {!loadingCapsule && capsuleDetails && (
                       <>
+                        {capsuleDetails.hangout && (
+                          <div className="rounded-xl border border-border/50 bg-muted/10 p-4 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline">{capsuleDetails.hangout.hangout_type || "Hangout"}</Badge>
+                              {capsuleDetails.hangout.status && (
+                                <Badge variant="secondary">{capsuleDetails.hangout.status}</Badge>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {capsuleDetails.hangout.title || "Hangout"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {capsuleDetails.hangout.description || "No description"}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                              {capsuleDetails.hangout.scheduled_date && (
+                                <span>
+                                  {formatDate(capsuleDetails.hangout.scheduled_date)}
+                                  {capsuleDetails.hangout.scheduled_time_of_day
+                                    ? ` • ${capsuleDetails.hangout.scheduled_time_of_day}`
+                                    : ""}
+                                </span>
+                              )}
+                              {!capsuleDetails.hangout.scheduled_date && capsuleDetails.hangout.scheduled_time && (
+                                <span>{formatTime(capsuleDetails.hangout.scheduled_time)}</span>
+                              )}
+                              {!capsuleDetails.hangout.scheduled_date && !capsuleDetails.hangout.scheduled_time &&
+                                capsuleDetails.hangout.created_at && (
+                                  <span>
+                                    {formatDate(capsuleDetails.hangout.created_at)} • {formatTime(capsuleDetails.hangout.created_at)}
+                                  </span>
+                                )}
+                              {formatLocation(capsuleDetails.hangout.location) && (
+                                <span>Location: {formatLocation(capsuleDetails.hangout.location)}</span>
+                              )}
+                            </div>
+                            {(capsuleDetails.hangout.attendees || []).length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {(capsuleDetails.hangout.attendees || []).map((participant) => (
+                                  <span
+                                    key={`attendee-${participant.user_id}`}
+                                    className="text-xs rounded-full bg-muted px-2 py-1"
+                                  >
+                                    {participant.profile?.full_name || participant.user_id.slice(0, 6)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="rounded-lg bg-muted/40 p-3 text-sm text-foreground">
                           {capsuleDetails.summary || "No summary yet."}
                         </div>
@@ -1245,6 +1396,11 @@ const SocialPage = () => {
                                       >
                                         {item.media_type === "video" ? (
                                           <video controls={false} muted src={item.media_url} className="w-full h-36 object-cover" />
+                                        ) : item.media_type === "audio" ? (
+                                          <div className="w-full h-36 flex flex-col items-center justify-center bg-muted/40">
+                                            <Mic className="w-6 h-6 mb-2" />
+                                            <span className="text-xs text-muted-foreground">Audio clip</span>
+                                          </div>
                                         ) : (
                                           <img src={item.media_url} alt="Capsule media" className="w-full h-36 object-cover" />
                                         )}
@@ -1265,6 +1421,51 @@ const SocialPage = () => {
                             <p className="text-sm text-muted-foreground">No media added yet.</p>
                           )}
                         </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Reflections</p>
+                          {capsuleDetails.reflections?.length ? (
+                            <div className="space-y-2">
+                              {capsuleDetails.reflections.map((reflection) => (
+                                <div
+                                  key={reflection.reflection_id}
+                                  className="rounded-lg border border-border/40 bg-muted/20 p-3"
+                                >
+                                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                                    {reflection.reflection_text}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground mt-2">
+                                    {reflection.author?.full_name || reflection.user_id.slice(0, 6)} • {formatTime(reflection.created_at)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No reflections yet.</p>
+                          )}
+                          <div className="rounded-xl border border-border/50 bg-background p-3 space-y-2">
+                            <Input
+                              placeholder="Share a short reflection..."
+                              value={reflectionDraft}
+                              onChange={(event) => setReflectionDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  void handleAddReflection();
+                                }
+                              }}
+                            />
+                            <div className="flex justify-end">
+                              <Button
+                                type="button"
+                                onClick={() => void handleAddReflection()}
+                                disabled={sendingReflection || !reflectionDraft.trim()}
+                              >
+                                {sendingReflection ? "Saving..." : "Add Reflection"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
                       </>
                     )}
 
@@ -1275,6 +1476,8 @@ const SocialPage = () => {
                           <div className="space-y-2">
                             {capsuleMediaFile?.type.startsWith("video/") ? (
                               <video controls src={capsuleMediaPreviewUrl} className="max-h-44 w-full rounded-lg" />
+                            ) : capsuleMediaFile?.type.startsWith("audio/") ? (
+                              <audio controls src={capsuleMediaPreviewUrl} className="w-full" />
                             ) : (
                               <img src={capsuleMediaPreviewUrl} alt="Selected" className="max-h-44 rounded-lg" />
                             )}
@@ -1284,7 +1487,7 @@ const SocialPage = () => {
                           <input
                             ref={capsuleMediaInputRef}
                             type="file"
-                            accept="image/*,video/*"
+                            accept="image/*,video/*,audio/*"
                             className="hidden"
                             onChange={handleCapsuleMediaSelected}
                           />
@@ -1330,6 +1533,11 @@ const SocialPage = () => {
                   >
                     {item.media_type === "video" ? (
                       <video controls src={item.media_url} className="w-full h-48 object-cover" />
+                    ) : item.media_type === "audio" ? (
+                      <div className="w-full h-48 flex flex-col items-center justify-center bg-muted/30">
+                        <Mic className="w-6 h-6 mb-2" />
+                        <span className="text-xs text-muted-foreground">Audio clip</span>
+                      </div>
                     ) : (
                       <img src={item.media_url} alt="Capsule media" className="w-full h-48 object-cover" />
                     )}
@@ -1372,6 +1580,10 @@ const SocialPage = () => {
               <div className="rounded-xl overflow-hidden border border-border/50 bg-muted/20">
                 {activeCapsuleMedia.media_type === "video" ? (
                   <video controls src={activeCapsuleMedia.media_url} className="w-full max-h-[65vh] object-contain" />
+                ) : activeCapsuleMedia.media_type === "audio" ? (
+                  <div className="p-6">
+                    <audio controls src={activeCapsuleMedia.media_url} className="w-full" />
+                  </div>
                 ) : (
                   <img src={activeCapsuleMedia.media_url} alt="Capsule media" className="w-full max-h-[65vh] object-contain" />
                 )}

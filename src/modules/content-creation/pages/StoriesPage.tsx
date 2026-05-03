@@ -25,12 +25,19 @@ interface Story {
 
 export default function StoriesPage() {
   const [stories, setStories] = useState<Story[]>([]);
+  const [activeStories, setActiveStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [displayOpen, setDisplayOpen] = useState(false);
 
   useEffect(() => {
     loadStories();
+  }, []);
+
+  // Auto-refresh stories every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(loadStories, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadStories = async () => {
@@ -43,7 +50,9 @@ export default function StoriesPage() {
     try {
       const result = await getStories(token);
       if (result?.data) {
+        const filtered = result.data.filter((s: Story) => new Date(s.expires_at) > new Date());
         setStories(result.data);
+        setActiveStories(filtered);
       }
     } catch (error) {
       toast({
@@ -60,7 +69,7 @@ export default function StoriesPage() {
     const expires = new Date(expiresAt);
     const diff = expires.getTime() - now.getTime();
     
-    if (diff <= 0) return "Expired";
+    if (diff <= 0) return null;
     
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -68,6 +77,8 @@ export default function StoriesPage() {
     if (hours > 0) return `${hours}h ${minutes}m left`;
     return `${minutes}m left`;
   };
+
+  const isStoryActive = (expiresAt: string) => new Date(expiresAt) > new Date();
 
   const currentUserId = localStorage.getItem("supabaseToken") ? 
     JSON.parse(atob(localStorage.getItem("supabaseToken")!.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub : null;
@@ -94,12 +105,12 @@ export default function StoriesPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-foreground">{stories.length}</p>
+            {activeStories.length}
                   <p className="text-xs text-muted-foreground">Active Stories</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-foreground">
-                    {stories.filter(s => s.user_id === currentUserId).length}
+                    {activeStories.filter(s => s.user_id === currentUserId).length}
                   </p>
                   <p className="text-xs text-muted-foreground">Your Stories</p>
                 </div>
@@ -139,7 +150,7 @@ export default function StoriesPage() {
           <CardContent className="space-y-3">
             {loading && <div className="text-sm text-muted-foreground">Loading stories...</div>}
 
-            {!loading && !stories.length && (
+            {!loading && !activeStories.length && (
               <div className="glass-card rounded-xl p-8 text-center">
                 <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-sm text-muted-foreground mb-2">No active stories</p>
@@ -153,7 +164,7 @@ export default function StoriesPage() {
               </div>
             )}
 
-            {!loading && stories.map((story) => (
+            {!loading && activeStories.map((story) => (
               <div
                 key={story.story_id}
                 className="glass-card rounded-xl p-4 space-y-3"
@@ -180,7 +191,9 @@ export default function StoriesPage() {
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>{story.media_type === 'video' ? 'Video' : 'Image'}</span>
                         <span>•</span>
-                        <span>{formatTimeRemaining(story.expires_at)}</span>
+      {formatTimeRemaining(story.expires_at) && (
+        <span>{formatTimeRemaining(story.expires_at)}</span>
+      )}
                         {story.user_id === currentUserId && (
                           <>
                             <span>•</span>

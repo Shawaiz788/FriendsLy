@@ -893,42 +893,7 @@ const ProfilePage = () => {
           </div>
         )}
 
-        <Card className="glass-card rounded-2xl border-border/50 mb-4">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Privacy & Safety</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-primary" />
-                  <p className="text-sm font-medium">Granular visibility controls</p>
-                </div>
-                <Badge>FR44</Badge>
-              </div>
-              <Select defaultValue="friends">
-                <SelectTrigger>
-                  <SelectValue placeholder="Who can view your activity" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="friends">Friends</SelectItem>
-                  <SelectItem value="close-friends">Close Friends</SelectItem>
-                  <SelectItem value="public">Public</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Trusted emergency contacts</span>
-                <Button variant="outline" size="sm" onClick={() => setTrustedContactsOpen(true)}>Manage</Button>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Block and report</span>
-                <Button variant="outline" size="sm" onClick={() => setBlockReportOpen(true)}>
-                  <ShieldAlert className="w-4 h-4" /> Open
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+       
 
         <Card className="glass-card rounded-2xl border-border/50 mb-4">
           <CardHeader className="pb-3">

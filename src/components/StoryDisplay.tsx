@@ -72,7 +72,8 @@ export default function StoryDisplay({ open, onClose }: StoryDisplayProps) {
     try {
       const result = await getStories(token);
       if (result?.data) {
-        setStories(result.data);
+        const filtered = result.data.filter((s: Story) => new Date(s.expires_at) > new Date());
+        setStories(filtered);
       }
     } catch (error) {
       toast({
@@ -133,7 +134,7 @@ export default function StoryDisplay({ open, onClose }: StoryDisplayProps) {
     const expires = new Date(expiresAt);
     const diff = expires.getTime() - now.getTime();
     
-    if (diff <= 0) return "Expired";
+    if (diff <= 0) return null;
     
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -239,10 +240,12 @@ export default function StoryDisplay({ open, onClose }: StoryDisplayProps) {
                     <p className="text-white font-semibold text-sm">
                       {currentStory?.author?.full_name || currentStory?.author?.username || 'Unknown'}
                     </p>
-                    <p className="text-white/80 text-xs flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {currentStory && formatTimeRemaining(currentStory.expires_at)}
-                    </p>
+                    {formatTimeRemaining(currentStory?.expires_at) && (
+                      <p className="text-white/80 text-xs flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatTimeRemaining(currentStory!.expires_at)}
+                      </p>
+                    )}
                   </div>
                 </div>
                 

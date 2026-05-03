@@ -1,6 +1,5 @@
 export interface IntentPreferences {
-  activeIntent: string;
-  enabledIntents: string[];
+  activeIntents: string[];
   innerRadiusKm: number;
   outerRadiusKm: number;
   autoExpire: boolean;
@@ -9,8 +8,7 @@ export interface IntentPreferences {
 const STORAGE_KEY = "friendsly.intentPreferences";
 
 export const DEFAULT_INTENT_PREFERENCES: IntentPreferences = {
-  activeIntent: "Free",
-  enabledIntents: ["Free", "Busy", "Studying", "Hungry", "Working", "Exercising", "Just Chilling"],
+  activeIntents: ["Free"],
   innerRadiusKm: 1,
   outerRadiusKm: 5,
   autoExpire: true,
@@ -27,16 +25,12 @@ export const loadIntentPreferences = (): IntentPreferences => {
 
   try {
     const parsed = JSON.parse(raw) as Partial<IntentPreferences>;
-    const enabledIntents = Array.isArray(parsed.enabledIntents)
-      ? parsed.enabledIntents.filter((value): value is string => typeof value === "string")
-      : DEFAULT_INTENT_PREFERENCES.enabledIntents;
+    const activeIntents = Array.isArray(parsed.activeIntents)
+      ? parsed.activeIntents.filter((value): value is string => typeof value === "string")
+      : DEFAULT_INTENT_PREFERENCES.activeIntents;
 
     return {
-      activeIntent:
-        typeof parsed.activeIntent === "string" && parsed.activeIntent.trim()
-          ? parsed.activeIntent
-          : DEFAULT_INTENT_PREFERENCES.activeIntent,
-      enabledIntents,
+      activeIntents,
       innerRadiusKm: coerceNumber(parsed.innerRadiusKm, DEFAULT_INTENT_PREFERENCES.innerRadiusKm),
       outerRadiusKm: coerceNumber(parsed.outerRadiusKm, DEFAULT_INTENT_PREFERENCES.outerRadiusKm),
       autoExpire:

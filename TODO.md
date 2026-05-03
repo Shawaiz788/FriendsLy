@@ -1,17 +1,20 @@
-# Fix HomePage Debug Error (ERR_CONNECTION_REFUSED port 7565)
+# Multiple Intents - COMPLETED ✅
 
-## Status: 🚧 In Progress
+## Summary of Changes
+- Frontend: HomePage.tsx now supports multiple active intents with toggle UI
+- Services: intentPreferences.ts updated to use activeIntents: string[]
+- API: intentPreferencesApi.ts sends/receives active_intents array
+- Backend: UserController.js updated to handle active_intents array
+  - Validation for array of strings
+  - DB upsert uses active_intents
+  - getMyIntentPreferences selects active_intents column
+  - Defaults updated to active_intents: ['Free']
 
-### Step 1: [DONE] Create TODO.md
-### Step 2: [PENDING] Edit src/modules/location-suggestion/pages/HomePage.tsx
-   - Remove 2 debug `fetch` blocks to localhost:7565
-### Step 3: [PENDING] Edit backend/src/modules/user-management/controllers/UserController.js  
-   - Remove 2 debug `fetch` blocks to localhost:7565
-### Step 4: [PENDING] Test
-   - Hard refresh browser (Ctrl+Shift+R)
-   - Load homepage, wait 30s
-   - Check dev tools Network/Console → No 7565 errors
-### Step 5: [PENDING] Backend restart (if running)
-   - `cd backend && npm start` (or your start command)
-### Step 6: [PENDING] Complete task
+## Testing
+Test by:
+1. Toggling multiple intent badges in HomePage
+2. Verify they persist in localStorage/backend
+3. Check multiple active badges are highlighted
+4. Backend returns/saves array correctly
 
+Feature complete! 🎉

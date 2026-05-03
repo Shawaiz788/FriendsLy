@@ -212,14 +212,17 @@ const UserController = {
   async upsertMyIntentPreferences(req, res) {
     const supabase = getSupabase(req);
     const token = req.supabaseToken;
-    const { active_intent, enabled_intents, inner_radius_km, outer_radius_km, auto_expire } = req.body;
+    const { active_intents, enabled_intents, inner_radius_km, outer_radius_km, auto_expire } = req.body;
 
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
     const userId = userData.user.id;
 
-    if (typeof active_intent !== 'string' || !active_intent.trim()) {
-      return res.status(400).json({ error: 'active_intent is required' });
+    if (!Array.isArray(active_intents) || active_intents.length === 0) {
+      return res.status(400).json({ error: 'active_intents must be a non-empty array of strings' });
+    }
+    if (!active_intents.every(i => typeof i === 'string' && i.trim())) {
+      return res.status(400).json({ error: 'active_intents must contain valid strings' });
     }
     if (!Array.isArray(enabled_intents) || enabled_intents.some((value) => typeof value !== 'string')) {
       return res.status(400).json({ error: 'enabled_intents must be an array of strings' });
@@ -241,7 +244,7 @@ const UserController = {
         .upsert(
           {
             user_id: userId,
-            active_intent: active_intent.trim(),
+            active_intents,
             enabled_intents,
             inner_radius_km,
             outer_radius_km,

@@ -93,8 +93,7 @@ const offsetCoordinateByKm = (
 
 const HomePage = () => {
   const { auraPreferences } = useAuraPreferences();
-  const [activeIntent, setActiveIntent] = useState(() => loadIntentPreferences().activeIntent);
-  const [enabledIntents, setEnabledIntents] = useState(() => loadIntentPreferences().enabledIntents);
+  const [activeIntents, setActiveIntents] = useState(() => loadIntentPreferences().activeIntents);
   const [innerRadiusKm, setInnerRadiusKm] = useState(() => loadIntentPreferences().innerRadiusKm);
   const [outerRadiusKm, setOuterRadiusKm] = useState(() => loadIntentPreferences().outerRadiusKm);
   const [ghostMode, setGhostMode] = useState(() => localStorage.getItem("friendsly-ghost-mode") === "1");
@@ -135,16 +134,14 @@ const HomePage = () => {
 
   const applyPreferences = (
     preferences: {
-      activeIntent: string;
-      enabledIntents: string[];
+      activeIntents: string[];
       innerRadiusKm: number;
       outerRadiusKm: number;
       autoExpire: boolean;
     },
     persistLocal = true,
   ) => {
-    setActiveIntent(preferences.activeIntent || DEFAULT_INTENT_PREFERENCES.activeIntent);
-    setEnabledIntents(preferences.enabledIntents);
+    setActiveIntents(preferences.activeIntents);
     setInnerRadiusKm(preferences.innerRadiusKm);
     setOuterRadiusKm(preferences.outerRadiusKm);
     if (persistLocal) {
@@ -269,8 +266,7 @@ const HomePage = () => {
       const result = await getMyIntentPreferences(token);
       if (result?.data) {
         applyPreferences({
-          activeIntent: result.data.active_intent || localPreferences.activeIntent,
-          enabledIntents: result.data.enabled_intents || localPreferences.enabledIntents,
+          activeIntents: result.data.active_intents || localPreferences.activeIntents,
           innerRadiusKm: result.data.inner_radius_km ?? localPreferences.innerRadiusKm,
           outerRadiusKm: result.data.outer_radius_km ?? localPreferences.outerRadiusKm,
           autoExpire:
@@ -293,15 +289,15 @@ const HomePage = () => {
 
   useEffect(() => {
     const current = loadIntentPreferences();
-    if (current.activeIntent === activeIntent) return;
+    if (JSON.stringify(current.activeIntents) === JSON.stringify(activeIntents)) return;
     const next = {
       ...current,
-      activeIntent,
+      activeIntents,
     };
     saveIntentPreferences(next);
     if (!token) return;
     void upsertMyIntentPreferences(next, token);
-  }, [activeIntent, token]);
+  }, [activeIntents, token]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -660,15 +656,19 @@ const HomePage = () => {
       <div className="px-6 py-4">
         <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">Your intent</p>
         <div className="flex flex-wrap gap-2">
-          {intents
-            .filter((intent) => enabledIntents.includes(intent.label))
-            .map((intent) => (
+          {intents.map((intent) => (
             <IntentBadge
               key={intent.label}
               label={intent.label}
               emoji={intent.emoji}
-              active={activeIntent === intent.label}
-              onClick={() => setActiveIntent(intent.label)}
+              active={activeIntents.includes(intent.label)}
+              onClick={() => {
+                setActiveIntents(prev => 
+                  prev.includes(intent.label)
+                    ? prev.filter(i => i !== intent.label)
+                    : [...prev, intent.label]
+                );
+              }}
             />
           ))}
         </div>

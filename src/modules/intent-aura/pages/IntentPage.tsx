@@ -26,8 +26,7 @@ const allIntents = [
 
 const IntentPage = () => {
   const initialPreferences = useMemo(() => loadIntentPreferences(), []);
-  const [activeIntent, setActiveIntent] = useState(initialPreferences.activeIntent);
-  const [enabledIntents, setEnabledIntents] = useState(initialPreferences.enabledIntents);
+  const [activeIntents, setActiveIntents] = useState(initialPreferences.activeIntents);
   const [innerRadius, setInnerRadius] = useState([initialPreferences.innerRadiusKm]);
   const [outerRadius, setOuterRadius] = useState([initialPreferences.outerRadiusKm]);
   const [autoExpire, setAutoExpire] = useState(initialPreferences.autoExpire);
@@ -35,20 +34,16 @@ const IntentPage = () => {
   const hasHydratedFromBackend = useRef(false);
   const hasLocalChanges = useRef(false);
 
-  const toggleEnabled = (label: string) => {
+  const toggleActiveIntent = (label: string) => {
     hasLocalChanges.current = true;
-    setEnabledIntents((prev) =>
+    setActiveIntents((prev) =>
       prev.includes(label)
         ? prev.filter((l) => l !== label)
         : [...prev, label]
     );
   };
 
-  useEffect(() => {
-    if (!enabledIntents.includes(activeIntent) && enabledIntents.length > 0) {
-      setActiveIntent(enabledIntents[0]);
-    }
-  }, [activeIntent, enabledIntents]);
+
 
   useEffect(() => {
     setToken(localStorage.getItem("supabaseToken") || "");
@@ -63,8 +58,7 @@ const IntentPage = () => {
     const loadFromBackend = async () => {
       const result = await getMyIntentPreferences(token);
       if (result?.data && !hasLocalChanges.current) {
-        setActiveIntent(result.data.active_intent || initialPreferences.activeIntent);
-        setEnabledIntents(result.data.enabled_intents || initialPreferences.enabledIntents);
+        setActiveIntents(result.data.active_intents || initialPreferences.activeIntents);
         setInnerRadius([result.data.inner_radius_km ?? initialPreferences.innerRadiusKm]);
         setOuterRadius([result.data.outer_radius_km ?? initialPreferences.outerRadiusKm]);
         setAutoExpire(
@@ -77,12 +71,11 @@ const IntentPage = () => {
     };
 
     void loadFromBackend();
-  }, [initialPreferences.activeIntent, initialPreferences.autoExpire, initialPreferences.enabledIntents, initialPreferences.innerRadiusKm, initialPreferences.outerRadiusKm, token]);
+  }, [token]);
 
   useEffect(() => {
     const nextPreferences: IntentPreferences = {
-      activeIntent,
-      enabledIntents,
+      activeIntents,
       innerRadiusKm: innerRadius[0],
       outerRadiusKm: outerRadius[0],
       autoExpire,
@@ -97,7 +90,7 @@ const IntentPage = () => {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeIntent, autoExpire, enabledIntents, innerRadius, outerRadius, token]);
+  }, [activeIntents, autoExpire, innerRadius, outerRadius, token]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -114,43 +107,19 @@ const IntentPage = () => {
             Current Intent
           </p>
           <div className="flex flex-wrap gap-2">
-            {allIntents
-              .filter((i) => enabledIntents.includes(i.label))
-              .map((intent) => (
-                <IntentBadge
-                  key={intent.label}
-                  label={intent.label}
-                  emoji={intent.emoji}
-                  active={activeIntent === intent.label}
-                  onClick={() => {
-                    hasLocalChanges.current = true;
-                    setActiveIntent(intent.label);
-                  }}
-                />
-              ))}
-          </div>
-        </div>
-
-        {/* Enable/Disable intents */}
-        <div className="glass-card rounded-2xl p-5 mb-6">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3">
-            Enabled Intents
-          </p>
-          <div className="space-y-3">
             {allIntents.map((intent) => (
-              <div key={intent.label} className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm text-foreground">
-                  <span>{intent.emoji}</span>
-                  {intent.label}
-                </span>
-                <Switch
-                  checked={enabledIntents.includes(intent.label)}
-                  onCheckedChange={() => toggleEnabled(intent.label)}
-                />
-              </div>
+              <IntentBadge
+                key={intent.label}
+                label={intent.label}
+                emoji={intent.emoji}
+                active={activeIntents.includes(intent.label)}
+                onClick={() => toggleActiveIntent(intent.label)}
+              />
             ))}
           </div>
         </div>
+
+
 
         {/* Radius Controls */}
         <div className="glass-card rounded-2xl p-5 mb-6">

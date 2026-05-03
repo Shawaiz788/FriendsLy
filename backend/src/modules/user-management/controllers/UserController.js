@@ -1007,9 +1007,7 @@ const UserController = {
     const supabase = getSupabase(req);
     const token = req.supabaseToken;
     const { latitude, longitude } = req.body;
-    // #region agent log
-    fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H2',location:'UserController.js:updateMyLocation:entry',message:'Backend updateMyLocation called',data:{hasToken:!!token,lat:latitude,lng:longitude},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return res.status(400).json({ error: 'latitude and longitude are required numbers' });
@@ -1034,9 +1032,7 @@ const UserController = {
           },
           { onConflict: 'user_id' }
         );
-      // #region agent log
-      fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H2',location:'UserController.js:updateMyLocation:upsertResult',message:'Backend location upsert completed',data:{ok:!error,errorCode:error?.code||null,errorMessage:error?.message||null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+
 
       if (error) {
         if (error.code === '42P01') {

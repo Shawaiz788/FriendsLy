@@ -1,16 +1,17 @@
-# Media & Stories Merge + Unified Post Creation TODO
+# Fix HomePage Debug Error (ERR_CONNECTION_REFUSED port 7565)
 
-## Planned Steps:
-- [x] 1. Update BottomNav.tsx: Remove Stories tab from navItems
-- [x] 2. Update App.tsx: Remove /stories route  
-- [x] 3. Refactor MediaPage.tsx: 
-  - Add stories section at top (loadStories, stories list with thumbnails/timer)
-  - Add StoryUpload and StoryDisplay modals
-  - Remove inline post form
-  - Replace with single "Create Post" button -> CollaborativePostCreate (unified)
-- [x] 4. Generalize CollaborativePostCreate.tsx for normal/collaborative posts (collaborators optional)
-- [x] 5. Delete StoriesPage.tsx
-- [x] 6. Test Media tab: stories top, posts below, unified post creation with text/media/visibility/collaborators
-- [x] 7. Mark complete
+## Status: 🚧 In Progress
 
-**Current progress: Starting step 1**
+### Step 1: [DONE] Create TODO.md
+### Step 2: [PENDING] Edit src/modules/location-suggestion/pages/HomePage.tsx
+   - Remove 2 debug `fetch` blocks to localhost:7565
+### Step 3: [PENDING] Edit backend/src/modules/user-management/controllers/UserController.js  
+   - Remove 2 debug `fetch` blocks to localhost:7565
+### Step 4: [PENDING] Test
+   - Hard refresh browser (Ctrl+Shift+R)
+   - Load homepage, wait 30s
+   - Check dev tools Network/Console → No 7565 errors
+### Step 5: [PENDING] Backend restart (if running)
+   - `cd backend && npm start` (or your start command)
+### Step 6: [PENDING] Complete task
+

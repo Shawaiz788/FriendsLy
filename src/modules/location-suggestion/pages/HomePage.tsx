@@ -252,6 +252,15 @@ const HomePage = () => {
   }, [ghostMode]);
 
   useEffect(() => {
+    toast({
+      title: ghostMode ? "Ghost Mode enabled" : "Ghost Mode disabled",
+      description: ghostMode
+        ? "Location sharing is paused."
+        : "Location sharing is active again.",
+    });
+  }, [ghostMode]);
+
+  useEffect(() => {
     const refreshIntentPreferences = async () => {
       const localPreferences = loadIntentPreferences();
       applyPreferences(localPreferences, false);
@@ -335,9 +344,7 @@ const HomePage = () => {
       const nextLat = customEvent?.detail?.lat;
       const nextLng = customEvent?.detail?.lng;
       if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
-      // #region agent log
-      fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H3',location:'HomePage.tsx:handleManualLocationApply',message:'Received manual location apply event',data:{lat:nextLat,lng:nextLng},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+
       setUserLocation({ lat: nextLat, lng: nextLng });
     };
 
@@ -356,9 +363,7 @@ const HomePage = () => {
           { latitude: userLocation.lat, longitude: userLocation.lng },
           token,
         );
-        // #region agent log
-        fetch('http://127.0.0.1:7565/ingest/535c9ee7-ba31-46b6-8b49-e6d0f10e717f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a79ca8'},body:JSON.stringify({sessionId:'a79ca8',runId:'initial',hypothesisId:'H4',location:'HomePage.tsx:syncLocation',message:'Auto sync location response',data:{lat:userLocation.lat,lng:userLocation.lng,success:!!result?.success,error:result?.error||null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+
       } catch (err) {
         console.error("Failed to sync my location", err);
       }
@@ -606,16 +611,7 @@ const HomePage = () => {
         <button
           type="button"
           onClick={() => {
-            setGhostMode((prev) => {
-              const next = !prev;
-              toast({
-                title: next ? "Ghost Mode enabled" : "Ghost Mode disabled",
-                description: next
-                  ? "Location sharing is paused."
-                  : "Location sharing is active again.",
-              });
-              return next;
-            });
+            setGhostMode((prev) => !prev);
           }}
           className={cn(
             "h-10 px-3 rounded-full flex items-center gap-2 transition-all border",

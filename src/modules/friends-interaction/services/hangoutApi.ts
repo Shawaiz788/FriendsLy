@@ -221,7 +221,7 @@ export async function addCapsuleMedia(
     mediaType,
   }: {
     mediaUrl: string;
-    mediaType: "image" | "video";
+    mediaType: "image" | "video" | "audio";
   },
   token: string,
 ) {

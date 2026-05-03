@@ -4,6 +4,8 @@ import BottomNav from "@/components/BottomNav";
 import ProximityMap, { getPositionedFriends, type PositionedFriend } from "@/components/ProximityMap";
 import IntentBadge from "@/components/IntentBadge";
 import SuggestionCard from "@/components/SuggestionCard";
+import NearbyHighlights from "@/components/NearbyHighlights";
+import TrendingActivities from "@/components/TrendingActivities";
 import { Button } from "@/components/ui/button";
 import { Bell, Ghost } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,8 @@ import {
   loadHangoutSnoozeMap,
   saveHangoutSnoozeMap,
 } from "@/lib/suggestionSnooze";
+import { getNearbyHighlights, getTrendingLocalActivities } from "@/modules/location-suggestion/services/locationApi";
+import type { MediaPost } from "@/modules/content-creation/services/mediaApi";
 
 const intents = [
   { label: "Free", emoji: "✌️" },
@@ -113,6 +117,20 @@ const HomePage = () => {
   const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
   const [snoozeUntilByUser, setSnoozeUntilByUser] = useState<Record<string, number>>(() => loadHangoutSnoozeMap());
   const [inviteCount, setInviteCount] = useState(0);
+  const [nearbyHighlights, setNearbyHighlights] = useState<MediaPost[]>([]);
+  const [trendingActivities, setTrendingActivities] = useState<
+    Array<{
+      hangout_id: string;
+      title?: string;
+      description?: string;
+      creator_id?: string;
+      location?: { x: number; y: number };
+      scheduled_time?: string;
+      status: string;
+      participant_count?: number;
+      creator?: { full_name: string; profile_photo_url?: string };
+    }>
+  >([]);
   const navigate = useNavigate();
 
   const applyPreferences = (
@@ -186,6 +204,46 @@ const HomePage = () => {
 
     void loadInvites();
     const intervalId = window.setInterval(loadInvites, 15_000);
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
+  // Load nearby highlights
+  useEffect(() => {
+    if (!token || !userLocation) return;
+
+    const loadHighlights = async () => {
+      try {
+        const result = await getNearbyHighlights(userLocation, outerRadiusKm, token);
+        if (Array.isArray(result?.data)) {
+          setNearbyHighlights(result.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch highlights", err);
+      }
+    };
+
+    void loadHighlights();
+    const intervalId = window.setInterval(loadHighlights, 30_000); // Refresh every 30s
+    return () => window.clearInterval(intervalId);
+  }, [token, userLocation, outerRadiusKm]);
+
+  // Load trending local activities
+  useEffect(() => {
+    if (!token) return;
+
+    const loadActivities = async () => {
+      try {
+        const result = await getTrendingLocalActivities(token);
+        if (Array.isArray(result?.data)) {
+          setTrendingActivities(result.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch activities", err);
+      }
+    };
+
+    void loadActivities();
+    const intervalId = window.setInterval(loadActivities, 30_000); // Refresh every 30s
     return () => window.clearInterval(intervalId);
   }, [token]);
 
@@ -667,6 +725,30 @@ const HomePage = () => {
             No active overlap suggestions right now. Keep location on to detect nearby hangouts.
           </div>
         )}
+      </div>
+
+      {/* Nearby Highlights */}
+      <div className="px-6 space-y-3 pt-4">
+        <h2 className="font-serif text-lg font-semibold text-foreground">Nearby Highlights</h2>
+        <NearbyHighlights
+          highlights={nearbyHighlights}
+          onViewProfile={(userId) => navigate(`/user/${userId}`)}
+          onLike={() => {
+            toast({
+              title: "Feature coming soon",
+              description: "Like functionality will be available soon",
+            });
+          }}
+        />
+      </div>
+
+      {/* Trending Local Activities */}
+      <div className="px-6 space-y-3 pt-4">
+        <h2 className="font-serif text-lg font-semibold text-foreground">Trending Local Activities</h2>
+        <TrendingActivities
+          activities={trendingActivities}
+          onJoin={(hangoutId) => navigate(`/social?tab=chat&hangout=${hangoutId}`)}
+        />
       </div>
 
       <BottomNav />

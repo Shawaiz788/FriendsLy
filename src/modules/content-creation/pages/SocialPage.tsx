@@ -228,6 +228,19 @@ const SocialPage = () => {
       if (!exists) {
         setSelectedHangoutId(data[0].hangout_id);
       }
+    } catch (err) {
+      const message =
+        err instanceof TypeError && err.message.includes("fetch")
+          ? "Cannot reach the API server. Start the backend (e.g. npm run start in the backend folder) or set VITE_API_BASE_URL."
+          : err instanceof Error
+            ? err.message
+            : "Failed to load hangouts.";
+      toast({
+        title: "Hangouts unavailable",
+        description: message,
+        variant: "destructive",
+      });
+      setHangouts([]);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
-// Location and suggestion APIs
+import { API_BASE } from "@/lib/apiBase";
 
-const API_BASE = "http://localhost:3001";
+// Location and suggestion APIs
 
 export async function updateMyLocation(
   { latitude, longitude }: { latitude: number; longitude: number },

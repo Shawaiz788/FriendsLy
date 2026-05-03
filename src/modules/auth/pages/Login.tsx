@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import logoImg from "@/assets/logo.png";
+import { API_BASE } from "@/lib/apiBase";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -29,14 +30,14 @@ const Login = () => {
           
           // Fetch and cache profile data immediately so it's ready when navigating to profile
           try {
-            const resUser = await fetch("http://localhost:3002/api/user/me", {
+            const resUser = await fetch(`${API_BASE}/api/user/me`, {
               headers: { "Authorization": `Bearer ${session.access_token}` },
             });
             const userJson = await resUser.json();
             const userId = userJson?.user?.id;
             
             if (userId) {
-              const res = await fetch(`http://localhost:3002/api/user/download?id=${userId}`, {
+              const res = await fetch(`${API_BASE}/api/user/download?id=${userId}`, {
                 headers: { "Authorization": `Bearer ${session.access_token}` },
               });
               const profileData = await res.json();

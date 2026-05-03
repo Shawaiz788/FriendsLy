@@ -1,6 +1,6 @@
-// User and account management APIs
+import { API_BASE } from "@/lib/apiBase";
 
-const API_BASE = "http://localhost:3001";
+// User and account management APIs
 
 async function parseResponse(res: Response) {
   const text = await res.text();

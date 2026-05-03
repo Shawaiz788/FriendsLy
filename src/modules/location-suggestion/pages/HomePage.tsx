@@ -19,6 +19,11 @@ import {
   getMyIntentPreferences,
   upsertMyIntentPreferences,
 } from "@/modules/intent-aura/services/intentPreferencesApi";
+import {
+  formatSnoozeDuration,
+  loadHangoutSnoozeMap,
+  saveHangoutSnoozeMap,
+} from "@/lib/suggestionSnooze";
 
 const intents = [
   { label: "Free", emoji: "✌️" },
@@ -106,6 +111,7 @@ const HomePage = () => {
   >([]);
   const [startingSuggestionFor, setStartingSuggestionFor] = useState<string | null>(null);
   const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
+  const [snoozeUntilByUser, setSnoozeUntilByUser] = useState<Record<string, number>>(() => loadHangoutSnoozeMap());
   const [inviteCount, setInviteCount] = useState(0);
   const navigate = useNavigate();
 
@@ -377,14 +383,17 @@ const HomePage = () => {
     return getPositionedFriends(userPos);
   }, [friendsLocations, innerRadiusKm, outerRadiusKm, userLocation]);
 
-  const suggestedHangouts = useMemo(
-    () =>
-      mapFriends
-        .filter((friend) => (friend.presence === "nearby" || friend.presence === "city") && !!friend.userId)
-        .filter((friend) => !dismissedSuggestions.includes(friend.userId!))
-        .slice(0, 3),
-    [dismissedSuggestions, mapFriends],
-  );
+  const suggestedHangouts = useMemo(() => {
+    const now = Date.now();
+    return mapFriends
+      .filter((friend) => (friend.presence === "nearby" || friend.presence === "city") && !!friend.userId)
+      .filter((friend) => !dismissedSuggestions.includes(friend.userId!))
+      .filter((friend) => {
+        const until = snoozeUntilByUser[friend.userId!];
+        return !until || until <= now;
+      })
+      .slice(0, 3);
+  }, [dismissedSuggestions, mapFriends, snoozeUntilByUser]);
 
   const handleManualLocationUpdate = async () => {
     if (!token) {
@@ -490,8 +499,42 @@ const HomePage = () => {
     }
   };
 
-  const handleSuggestionLater = (suggestedUserId: string) => {
-    setDismissedSuggestions((prev) => [...prev, suggestedUserId]);
+  const persistSuggestionSnooze = (suggestedUserId: string, durationMs: number) => {
+    const until = Date.now() + durationMs;
+    setSnoozeUntilByUser((prev) => {
+      const next = { ...prev, [suggestedUserId]: until };
+      saveHangoutSnoozeMap(next);
+      return next;
+    });
+  };
+
+  const handleMessageFriend = (suggestedUserId: string) => {
+    if (!token) {
+      toast({
+        title: "Not logged in",
+        description: "Log in to open private messages.",
+      });
+      return;
+    }
+    navigate(`/chat/${suggestedUserId}`);
+  };
+
+  const handleSuggestionSnooze = (suggestedUserId: string, durationMs: number) => {
+    persistSuggestionSnooze(suggestedUserId, durationMs);
+    toast({
+      title: "Hangout prompts snoozed",
+      description: `No overlap alerts for this friend for ${formatSnoozeDuration(durationMs)}.`,
+    });
+  };
+
+  /** Decline / dismiss: same storage as snooze, fixed 24 hours for this friend. */
+  const handleSuggestionCancel = (suggestedUserId: string) => {
+    const durationMs = 24 * 60 * 60 * 1000;
+    persistSuggestionSnooze(suggestedUserId, durationMs);
+    toast({
+      title: "Hangout declined",
+      description: "You won’t see hangout suggestions from this friend for 24 hours.",
+    });
   };
 
   return (
@@ -613,7 +656,9 @@ const HomePage = () => {
               intent={suggestion.intent}
               reason={`You and ${suggestion.name} are within your ${innerRadiusKm}-${outerRadiusKm}km radius and both look available.`}
               onStartHangout={handleStartHangout}
-              onLater={handleSuggestionLater}
+              onMessage={handleMessageFriend}
+              onSnooze={handleSuggestionSnooze}
+              onCancel={handleSuggestionCancel}
               isStarting={startingSuggestionFor === suggestion.userId}
             />
           ))

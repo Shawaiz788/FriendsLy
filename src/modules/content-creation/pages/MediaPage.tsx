@@ -56,7 +56,11 @@ const MediaPage = () => {
       }
     } catch (err) {
       console.error(err);
-      toast({ title: "Couldn’t load media", description: "Try again in a moment." });
+      const description =
+        err instanceof TypeError && err.message.includes("fetch")
+          ? "Can’t reach the API. Start the backend and ensure Vite proxy matches backend PORT (VITE_DEV_API_TARGET), or set VITE_API_BASE_URL."
+          : "Try again in a moment.";
+      toast({ title: "Couldn’t load media", description, variant: "destructive" });
     } finally {
       setLoading(false);
     }

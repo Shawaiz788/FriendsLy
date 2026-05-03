@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, User, UserPlus, UserCheck, Clock, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getUserProfile, sendFriendRequest } from "@/lib/api";
+import { API_BASE } from "@/lib/apiBase";
 
 interface UserProfile {
   user_id: string;
@@ -37,7 +38,7 @@ const UserProfilePage = () => {
     // Get current user ID
     const getUserId = async () => {
       try {
-        const res = await fetch("http://localhost:3001/api/user/me", {
+        const res = await fetch(`${API_BASE}/api/user/me`, {
           headers: { "Authorization": `Bearer ${token}` },
         });
         const data = await res.json();
@@ -65,7 +66,7 @@ const UserProfilePage = () => {
           // Check friendship status
           try {
             const statusRes = await fetch(
-              `http://localhost:3001/api/user/${userId}/friend-status`,
+              `${API_BASE}/api/user/${userId}/friend-status`,
               { headers: { "Authorization": `Bearer ${token}` } }
             ).then(r => r.json());
 

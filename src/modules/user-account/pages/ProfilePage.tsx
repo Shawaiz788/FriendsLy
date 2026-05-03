@@ -19,16 +19,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deactivateAccount, deleteAccount, editProfile, logoutAllSessions, logoutCurrentSession, updateMyLocation } from "@/lib/api";
+import { API_BASE } from "@/lib/apiBase";
 
 async function fetchProfile(token) {
   // Get user id from token
-  const resUser = await fetch("http://localhost:3001/api/user/me", {
+  const resUser = await fetch(`${API_BASE}/api/user/me`, {
     headers: { "Authorization": `Bearer ${token}` },
   });
   const userJson = await resUser.json();
   const userId = userJson?.user?.id;
   if (!userId) return { data: [] };
-  const res = await fetch(`http://localhost:3001/api/user/download?id=${userId}`, {
+  const res = await fetch(`${API_BASE}/api/user/download?id=${userId}`, {
     headers: { "Authorization": `Bearer ${token}` },
   });
   const data = await res.json();
@@ -280,7 +281,7 @@ const ProfilePage = () => {
       }
       
       // Get user ID
-      fetch("http://localhost:3001/api/user/me", {
+      fetch(`${API_BASE}/api/user/me`, {
         headers: { "Authorization": `Bearer ${t}` },
       }).then(res => res.json()).then(data => {
         if (data?.user?.id) setUserId(data.user.id);
@@ -725,7 +726,7 @@ const ProfilePage = () => {
     setIsDownloading(true);
     setEditError("");
     try {
-      const res = await fetch(`http://localhost:3001/api/user/download?include=${encodeURIComponent(include)}`, {
+      const res = await fetch(`${API_BASE}/api/user/download?include=${encodeURIComponent(include)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();

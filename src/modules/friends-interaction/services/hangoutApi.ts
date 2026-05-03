@@ -1,6 +1,6 @@
-// Hangout interaction APIs under friends-interaction module.
+import { API_BASE } from "@/lib/apiBase";
 
-const API_BASE = "http://localhost:3001";
+// Hangout interaction APIs under friends-interaction module.
 
 async function parseResponseSafe(res: Response) {
   const responseText = await res.text();

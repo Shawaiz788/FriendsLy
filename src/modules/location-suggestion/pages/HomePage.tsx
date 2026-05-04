@@ -145,11 +145,21 @@ const HomePage = () => {
     },
     persistLocal = true,
   ) => {
-    setActiveIntents(preferences.activeIntents);
-    setInnerRadiusKm(preferences.innerRadiusKm);
-    setOuterRadiusKm(preferences.outerRadiusKm);
+    const sanitizedActiveIntents = preferences.activeIntents.filter(
+      (value) => typeof value === "string" && value.trim().length > 0,
+    );
+    const normalizedPreferences = {
+      ...preferences,
+      activeIntents: sanitizedActiveIntents.length
+        ? sanitizedActiveIntents
+        : DEFAULT_INTENT_PREFERENCES.activeIntents,
+    };
+
+    setActiveIntents(normalizedPreferences.activeIntents);
+    setInnerRadiusKm(normalizedPreferences.innerRadiusKm);
+    setOuterRadiusKm(normalizedPreferences.outerRadiusKm);
     if (persistLocal) {
-      saveIntentPreferences(preferences);
+      saveIntentPreferences(normalizedPreferences);
     }
   };
 
@@ -308,8 +318,13 @@ const HomePage = () => {
       if (!token) return;
       const result = await getMyIntentPreferences(token);
       if (result?.data) {
+        const backendActiveIntents = Array.isArray(result.data.active_intents)
+          ? result.data.active_intents.filter(
+              (value: unknown): value is string => typeof value === "string" && value.trim().length > 0,
+            )
+          : [];
         applyPreferences({
-          activeIntents: result.data.active_intents || localPreferences.activeIntents,
+          activeIntents: backendActiveIntents.length ? backendActiveIntents : localPreferences.activeIntents,
           innerRadiusKm: result.data.inner_radius_km ?? localPreferences.innerRadiusKm,
           outerRadiusKm: result.data.outer_radius_km ?? localPreferences.outerRadiusKm,
           autoExpire:
@@ -499,8 +514,8 @@ const HomePage = () => {
 
   const suggestedHangouts = useMemo(() => {
     const now = Date.now();
-    const userActiveIntents = loadIntentPreferences().activeIntents.filter(
-      (value) => typeof value === "string" && value.trim(),
+    const userActiveIntents = activeIntents.filter(
+      (value) => typeof value === "string" && value.trim().length > 0,
     );
     return mapFriends
       .filter((friend) => (friend.presence === "nearby" || friend.presence === "city") && !!friend.userId)
@@ -743,11 +758,12 @@ const HomePage = () => {
               emoji={intent.emoji}
               active={activeIntents.includes(intent.label)}
               onClick={() => {
-                setActiveIntents(prev => 
-                  prev.includes(intent.label)
-                    ? prev.filter(i => i !== intent.label)
-                    : [...prev, intent.label]
-                );
+                setActiveIntents((prev) => {
+                  const next = prev.includes(intent.label)
+                    ? prev.filter((item) => item !== intent.label)
+                    : [...prev, intent.label];
+                  return next.length ? next : prev;
+                });
               }}
             />
           ))}

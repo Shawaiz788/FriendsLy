@@ -57,7 +57,12 @@ const IntentPage = () => {
     const loadFromBackend = async () => {
       const result = await getMyIntentPreferences(token);
       if (result?.data && !hasLocalChanges.current) {
-        setActiveIntents(result.data.active_intents || initialPreferences.activeIntents);
+        const backendActiveIntents = Array.isArray(result.data.active_intents)
+          ? result.data.active_intents.filter(
+              (value: unknown): value is string => typeof value === "string" && value.trim().length > 0,
+            )
+          : [];
+        setActiveIntents(backendActiveIntents.length ? backendActiveIntents : initialPreferences.activeIntents);
         setInnerRadius([result.data.inner_radius_km ?? initialPreferences.innerRadiusKm]);
         setOuterRadius([result.data.outer_radius_km ?? initialPreferences.outerRadiusKm]);
         setAutoExpire(

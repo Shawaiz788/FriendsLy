@@ -25,8 +25,13 @@ export const loadIntentPreferences = (): IntentPreferences => {
 
   try {
     const parsed = JSON.parse(raw) as Partial<IntentPreferences>;
-    const activeIntents = Array.isArray(parsed.activeIntents)
-      ? parsed.activeIntents.filter((value): value is string => typeof value === "string")
+    const parsedActiveIntents = Array.isArray(parsed.activeIntents)
+      ? parsed.activeIntents.filter(
+          (value): value is string => typeof value === "string" && value.trim().length > 0,
+        )
+      : [];
+    const activeIntents = parsedActiveIntents.length
+      ? parsedActiveIntents
       : DEFAULT_INTENT_PREFERENCES.activeIntents;
 
     return {

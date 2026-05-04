@@ -62,17 +62,17 @@ const NearbyHighlights = ({
 
           {/* Media preview */}
           {post.media_url && (
-            <div className="relative w-full h-32 rounded-lg overflow-hidden bg-muted">
+            <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
               {post.media_type === "image" || !post.media_type ? (
                 <img
                   src={post.media_url}
                   alt="Post media"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <video
                   src={post.media_url}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   controls
                 />
               )}

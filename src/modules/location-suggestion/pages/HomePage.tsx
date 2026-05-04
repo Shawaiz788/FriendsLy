@@ -299,14 +299,6 @@ const HomePage = () => {
     localStorage.setItem("friendsly-ghost-mode", ghostMode ? "1" : "0");
   }, [ghostMode]);
 
-  useEffect(() => {
-    toast({
-      title: ghostMode ? "Ghost Mode enabled" : "Ghost Mode disabled",
-      description: ghostMode
-        ? "Location sharing is paused."
-        : "Location sharing is active again.",
-    });
-  }, [ghostMode]);
 
   useEffect(() => {
     const refreshIntentPreferences = async () => {
@@ -686,7 +678,16 @@ const HomePage = () => {
         <button
           type="button"
           onClick={() => {
-            setGhostMode((prev) => !prev);
+            setGhostMode((prev) => {
+              const next = !prev;
+              toast({
+                title: next ? "Ghost Mode enabled" : "Ghost Mode disabled",
+                description: next
+                  ? "Location sharing is paused."
+                  : "Location sharing is active again.",
+              });
+              return next;
+            });
           }}
           className={cn(
             "h-10 px-3 rounded-full flex items-center gap-2 transition-all border",

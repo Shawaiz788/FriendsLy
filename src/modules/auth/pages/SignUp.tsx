@@ -80,7 +80,7 @@ const SignUp = () => {
           setError(apiError);
         } else {
           setSuccess(true);
-          setTimeout(() => navigate("/login"), 1500);
+          navigate("/login");
         }
       } catch (err) {
         setError("Registration failed. Please try again.");

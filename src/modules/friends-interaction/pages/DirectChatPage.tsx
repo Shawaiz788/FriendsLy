@@ -226,12 +226,12 @@ const DirectChatPage = () => {
       }
 
       if (result.status === "missing-keys") {
-        if (e2eeNoticeRef.current !== "missing-keys") {
+        if (e2eeNoticeRef.current !== "missing-keys-v2") {
           toast({
             title: "Secure chat pending",
-            description: "Waiting for chat keys from all participants.",
+            description: "Waiting for encryption keys. Each participant needs to open the chat at least once to publish their key.",
           });
-          e2eeNoticeRef.current = "missing-keys";
+          e2eeNoticeRef.current = "missing-keys-v2";
         }
         return;
       }
@@ -284,8 +284,8 @@ const DirectChatPage = () => {
     if (!messageDraft.trim()) return;
     if (!groupKey) {
       toast({
-        title: "Secure chat not ready",
-        description: "Wait for encryption keys before sending text.",
+        title: "Secure chat pending",
+        description: "Waiting for encryption keys. Each participant needs to open the chat at least once to publish their key.",
       });
       return;
     }

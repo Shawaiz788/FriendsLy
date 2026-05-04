@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import logoImg from "@/assets/logo.png";
 import { API_BASE } from "@/lib/apiBase";
+import { ensurePublicKeyPublished } from "@/lib/e2ee";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ const Login = () => {
         // Store session token for authenticated requests
         if (session?.access_token) {
           localStorage.setItem("supabaseToken", session.access_token);
+          void ensurePublicKeyPublished(session.access_token);
           
           // Fetch and cache profile data immediately so it's ready when navigating to profile
           try {

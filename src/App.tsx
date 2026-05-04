@@ -2,7 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { ensurePublicKeyPublished } from "@/lib/e2ee";
 import Welcome from "./modules/auth/pages/Welcome";
 import Login from "./modules/auth/pages/Login";
 import SignUp from "./modules/auth/pages/SignUp";
@@ -21,12 +23,25 @@ import NotFound from "./modules/core/pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const E2eeBootstrap = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const token = localStorage.getItem("supabaseToken") || "";
+    if (!token) return;
+    void ensurePublicKeyPublished(token);
+  }, [location.pathname]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <E2eeBootstrap />
         <Routes>
           <Route path="/" element={<Welcome />} />
           <Route path="/login" element={<Login />} />

@@ -33,6 +33,7 @@ CREATE TABLE user_profiles (
     username VARCHAR(50) UNIQUE NOT NULL,
     bio TEXT,
     profile_photo_url TEXT,
+    e2ee_public_key TEXT,
     date_of_birth DATE,
     gender VARCHAR(50),
     dark_mode_enabled BOOLEAN DEFAULT FALSE,
@@ -201,6 +202,17 @@ CREATE TABLE group_members (
     role VARCHAR(20) DEFAULT 'member',
     PRIMARY KEY (group_id, user_id)
 );
+
+CREATE TABLE group_e2ee_wrapped_keys (
+    group_id UUID NOT NULL REFERENCES group_chats(group_id) ON DELETE CASCADE,
+    recipient_user_id UUID NOT NULL,
+    wrapper_user_id UUID NOT NULL,
+    nonce TEXT NOT NULL,
+    boxed_key TEXT NOT NULL,
+    PRIMARY KEY (group_id, recipient_user_id)
+);
+
+CREATE INDEX idx_group_e2ee_group ON group_e2ee_wrapped_keys(group_id);
 
 -- ============================================
 -- MESSAGES (E2E READY)

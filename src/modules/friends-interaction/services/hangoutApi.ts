@@ -104,6 +104,12 @@ type ChatMessagePayload =
   | {
       kind: "text";
       text?: string;
+      e2ee?: {
+        v: number;
+        alg: "nacl.secretbox";
+        nonce: string;
+        ciphertext: string;
+      };
     }
   | {
       kind: "image";

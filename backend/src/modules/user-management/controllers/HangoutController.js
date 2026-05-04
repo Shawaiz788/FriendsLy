@@ -714,6 +714,157 @@ const HangoutController = {
     }
   },
 
+  async getGroupMembersWithKeys(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { groupId } = req.params;
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      const supabase = await createAuthenticatedClient(token);
+
+      const hasAccess = await ensureGroupMembership(supabase, groupId, userId);
+      if (!hasAccess) return res.status(403).json({ error: 'You are not a member of this group chat' });
+
+      const { data: members, error: membersError } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId);
+
+      if (membersError) throw membersError;
+
+      const memberIds = (members || []).map((row) => row.user_id);
+      if (!memberIds.length) return res.json({ data: [] });
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('user_id, e2ee_public_key')
+        .in('user_id', memberIds);
+
+      if (profilesError) throw profilesError;
+
+      return res.json({ data: profiles || [] });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'E2EE tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getGroupE2eeKey(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { groupId } = req.params;
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      const supabase = await createAuthenticatedClient(token);
+
+      const hasAccess = await ensureGroupMembership(supabase, groupId, userId);
+      if (!hasAccess) return res.status(403).json({ error: 'You are not a member of this group chat' });
+
+      const { data: wrappedKey, error: wrappedKeyError } = await supabase
+        .from('group_e2ee_wrapped_keys')
+        .select('group_id, recipient_user_id, wrapper_user_id, nonce, boxed_key')
+        .eq('group_id', groupId)
+        .eq('recipient_user_id', userId)
+        .maybeSingle();
+
+      if (wrappedKeyError) throw wrappedKeyError;
+      if (!wrappedKey) return res.json({ data: null });
+
+      const { data: wrapperProfile, error: wrapperProfileError } = await supabase
+        .from('user_profiles')
+        .select('user_id, e2ee_public_key')
+        .eq('user_id', wrappedKey.wrapper_user_id)
+        .maybeSingle();
+
+      if (wrapperProfileError) throw wrapperProfileError;
+
+      return res.json({
+        data: {
+          ...wrappedKey,
+          wrapper_public_key: wrapperProfile?.e2ee_public_key || null,
+        },
+      });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'E2EE tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
+  async upsertGroupE2eeKeys(req, res) {
+    const baseSupabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { groupId } = req.params;
+    const { keys } = req.body;
+
+    if (!Array.isArray(keys) || keys.length === 0) {
+      return res.status(400).json({ error: 'keys array is required' });
+    }
+
+    try {
+      const currentUser = await getCurrentUser(baseSupabase, token);
+      if (!currentUser?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+      const userId = currentUser.id;
+      const supabase = await createAuthenticatedClient(token);
+
+      const hasAccess = await ensureGroupMembership(supabase, groupId, userId);
+      if (!hasAccess) return res.status(403).json({ error: 'You are not a member of this group chat' });
+
+      const { data: members, error: membersError } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId);
+
+      if (membersError) throw membersError;
+
+      const memberIds = new Set((members || []).map((row) => row.user_id));
+      const normalizedKeys = keys
+        .filter((key) =>
+          key &&
+          typeof key.recipient_user_id === 'string' &&
+          typeof key.nonce === 'string' &&
+          typeof key.boxed_key === 'string',
+        )
+        .map((key) => ({
+          group_id: groupId,
+          recipient_user_id: key.recipient_user_id,
+          wrapper_user_id: userId,
+          nonce: key.nonce,
+          boxed_key: key.boxed_key,
+        }))
+        .filter((key) => memberIds.has(key.recipient_user_id));
+
+      if (!normalizedKeys.length) {
+        return res.status(400).json({ error: 'No valid group recipients supplied' });
+      }
+
+      const { error: upsertError } = await supabase
+        .from('group_e2ee_wrapped_keys')
+        .upsert(normalizedKeys, { onConflict: 'group_id,recipient_user_id' });
+
+      if (upsertError) throw upsertError;
+
+      return res.json({ success: true, count: normalizedKeys.length });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return res.status(500).json({ error: 'E2EE tables are missing. Apply schema.sql to your database.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+  },
+
   async getGroupMessages(req, res) {
     const baseSupabase = getSupabase(req);
     const token = req.supabaseToken;
@@ -860,7 +1011,15 @@ const HangoutController = {
         normalizedPayload.kind = normalizedMessageType === 'voice' ? 'voice' : 'text';
       }
 
-      if (normalizedPayload.kind === 'text' && !String(normalizedPayload.text || '').trim()) {
+      const hasText = String(normalizedPayload.text || '').trim().length > 0;
+      const hasE2eePayload =
+        normalizedPayload.kind === 'text' &&
+        normalizedPayload.e2ee &&
+        typeof normalizedPayload.e2ee === 'object' &&
+        typeof normalizedPayload.e2ee.nonce === 'string' &&
+        typeof normalizedPayload.e2ee.ciphertext === 'string';
+
+      if (normalizedPayload.kind === 'text' && !hasText && !hasE2eePayload) {
         return res.status(400).json({ error: 'Text message cannot be empty' });
       }
 

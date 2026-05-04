@@ -458,6 +458,58 @@ const UserController = {
       res.json({ success: true, action: 'inserted' });
     }
   },
+  async getMyE2eePublicKey(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { data, error } = await authenticatedSupabase
+        .from('user_profiles')
+        .select('e2ee_public_key')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) return res.status(400).json({ error: formatSupabaseError(error, 'Unable to load key') });
+
+      return res.json({ data: { e2ee_public_key: data?.e2ee_public_key || null } });
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Unable to load key' });
+    }
+  },
+  async setMyE2eePublicKey(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { public_key } = req.body;
+
+    if (!public_key || typeof public_key !== 'string') {
+      return res.status(400).json({ error: 'public_key is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { error } = await authenticatedSupabase
+        .from('user_profiles')
+        .update({ e2ee_public_key: public_key })
+        .eq('user_id', userId);
+
+      if (error) return res.status(400).json({ error: formatSupabaseError(error, 'Unable to save key') });
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Unable to save key' });
+    }
+  },
   async deactivateAccount(req, res) {
     const supabase = getSupabase(req);
     const token = req.supabaseToken;

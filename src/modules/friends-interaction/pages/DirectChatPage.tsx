@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+import { ensureGroupKey, encryptTextPayload, resolveTextPayload } from "@/lib/e2ee";
 import {
   getGroupMessages,
   getOrCreateDirectChat,
@@ -28,6 +29,12 @@ type GroupMessage = {
     latitude?: number;
     longitude?: number;
     duration_ms?: number;
+    e2ee?: {
+      v: number;
+      alg: "nacl.secretbox";
+      nonce: string;
+      ciphertext: string;
+    };
   };
   sender_profile: {
     full_name?: string;
@@ -47,6 +54,7 @@ const DirectChatPage = () => {
   const { friendId } = useParams();
   const [token, setToken] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [groupKey, setGroupKey] = useState<string | null>(null);
   const [friendProfile, setFriendProfile] = useState<FriendProfile>(null);
   const [loadingChat, setLoadingChat] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -66,6 +74,7 @@ const DirectChatPage = () => {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const e2eeNoticeRef = useRef<string | null>(null);
 
   const currentUserId = useMemo(() => {
     if (!token) return "";
@@ -201,6 +210,49 @@ const DirectChatPage = () => {
   }, [groupId, token]);
 
   useEffect(() => {
+    e2eeNoticeRef.current = null;
+    setGroupKey(null);
+
+    if (!token || !groupId) return;
+
+    let cancelled = false;
+    const loadE2eeKey = async () => {
+      const result = await ensureGroupKey(groupId, token);
+      if (cancelled) return;
+
+      if (result.status === "ready") {
+        setGroupKey(result.key);
+        return;
+      }
+
+      if (result.status === "missing-keys") {
+        if (e2eeNoticeRef.current !== "missing-keys") {
+          toast({
+            title: "Secure chat pending",
+            description: "Waiting for chat keys from all participants.",
+          });
+          e2eeNoticeRef.current = "missing-keys";
+        }
+        return;
+      }
+
+      if (e2eeNoticeRef.current !== "error") {
+        toast({
+          title: "Secure chat error",
+          description: result.error || "Could not set up encrypted chat.",
+          variant: "destructive",
+        });
+        e2eeNoticeRef.current = "error";
+      }
+    };
+
+    void loadE2eeKey();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, token]);
+
+  useEffect(() => {
     if (shouldAutoScrollRef.current) {
       scrollToBottom(messages.length <= 1 ? "auto" : "smooth");
       setHasUnseenMessages(false);
@@ -230,6 +282,13 @@ const DirectChatPage = () => {
     }
 
     if (!messageDraft.trim()) return;
+    if (!groupKey) {
+      toast({
+        title: "Secure chat not ready",
+        description: "Wait for encryption keys before sending text.",
+      });
+      return;
+    }
 
     setSendingMessage(true);
     try {
@@ -237,10 +296,7 @@ const DirectChatPage = () => {
         groupId,
         {
           messageType: "text",
-          payload: {
-            kind: "text",
-            text: messageDraft.trim(),
-          },
+          payload: encryptTextPayload(messageDraft.trim(), groupKey),
         },
         token,
       );
@@ -511,7 +567,8 @@ const DirectChatPage = () => {
                     {!loadingMessages &&
                       messages.map((message) => {
                         const isMine = currentUserId && message.sender_id === currentUserId;
-                        const payload = message.payload || { kind: "text", text: message.text || "" };
+                        const rawPayload = message.payload || { kind: "text", text: message.text || "" };
+                        const payload = resolveTextPayload(rawPayload, groupKey);
 
                         return (
                           <div
@@ -658,7 +715,11 @@ const DirectChatPage = () => {
                     />
                     <Button
                       onClick={() => void handleSendMessage()}
-                      disabled={sendingMessage || (!messageDraft.trim() && !selectedImageFile)}
+                      disabled={
+                        sendingMessage ||
+                        (!messageDraft.trim() && !selectedImageFile) ||
+                        (messageDraft.trim() && !groupKey)
+                      }
                     >
                       {sendingMessage ? "Sending..." : "Send"}
                     </Button>

@@ -65,6 +65,8 @@ router.post('/register', UserController.register);
 // Check if username is available
 router.get('/check-username', UserController.checkUsernameAvailability);
 router.put('/profile', requireAuth, UserController.editProfile);
+router.get('/e2ee/public-key', requireAuth, UserController.getMyE2eePublicKey);
+router.put('/e2ee/public-key', requireAuth, UserController.setMyE2eePublicKey);
 router.post('/deactivate', requireAuth, UserController.deactivateAccount);
 router.delete('/delete', requireAuth, UserController.deleteAccount);
 router.get('/download', requireAuth, UserController.downloadData);
@@ -85,6 +87,9 @@ router.get('/hangouts/invites', requireAuth, HangoutController.getMyHangoutInvit
 router.post('/hangouts/:hangoutId/respond', requireAuth, HangoutController.respondToHangoutInvite);
 router.get('/hangouts/mine', requireAuth, HangoutController.getMyHangouts);
 router.post('/chats/direct', requireAuth, HangoutController.getOrCreateDirectChat);
+router.get('/groups/:groupId/members', requireAuth, HangoutController.getGroupMembersWithKeys);
+router.get('/groups/:groupId/e2ee-keys', requireAuth, HangoutController.getGroupE2eeKey);
+router.post('/groups/:groupId/e2ee-keys', requireAuth, HangoutController.upsertGroupE2eeKeys);
 router.get('/groups/:groupId/messages', requireAuth, HangoutController.getGroupMessages);
 router.post('/groups/:groupId/messages', requireAuth, HangoutController.sendGroupMessage);
 router.post('/groups/:groupId/polls/:pollId/vote', requireAuth, HangoutController.voteInPoll);

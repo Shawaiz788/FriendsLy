@@ -23,6 +23,7 @@ import {
   voteInPoll,
 } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { ensureGroupKey, encryptTextPayload, resolveTextPayload } from "@/lib/e2ee";
 
 type HangoutParticipant = {
   user_id: string;
@@ -71,6 +72,12 @@ type GroupMessage = {
     | {
         kind: "text";
         text?: string;
+        e2ee?: {
+          v: number;
+          alg: "nacl.secretbox";
+          nonce: string;
+          ciphertext: string;
+        };
       }
     | {
         kind: "image";
@@ -163,6 +170,7 @@ const SocialPage = () => {
   const [messageDraft, setMessageDraft] = useState("");
   const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null);
   const [selectedMediaPreviewUrl, setSelectedMediaPreviewUrl] = useState<string | null>(null);
+  const [groupKey, setGroupKey] = useState<string | null>(null);
   const [capsuleMediaFile, setCapsuleMediaFile] = useState<File | null>(null);
   const [capsuleMediaPreviewUrl, setCapsuleMediaPreviewUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -188,6 +196,7 @@ const SocialPage = () => {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const e2eeNoticeRef = useRef<string | null>(null);
 
   const currentUserId = useMemo(() => {
     if (!token) return "";
@@ -389,6 +398,50 @@ const SocialPage = () => {
   }, [activeTab, selectedHangout?.group_chat?.group_id, token]);
 
   useEffect(() => {
+    e2eeNoticeRef.current = null;
+    setGroupKey(null);
+
+    const groupId = selectedHangout?.group_chat?.group_id;
+    if (!token || !groupId || activeTab !== "chat") return;
+
+    let cancelled = false;
+    const loadE2eeKey = async () => {
+      const result = await ensureGroupKey(groupId, token);
+      if (cancelled) return;
+
+      if (result.status === "ready") {
+        setGroupKey(result.key);
+        return;
+      }
+
+      if (result.status === "missing-keys") {
+        if (e2eeNoticeRef.current !== "missing-keys") {
+          toast({
+            title: "Secure chat pending",
+            description: "Waiting for chat keys from all participants.",
+          });
+          e2eeNoticeRef.current = "missing-keys";
+        }
+        return;
+      }
+
+      if (e2eeNoticeRef.current !== "error") {
+        toast({
+          title: "Secure chat error",
+          description: result.error || "Could not set up encrypted chat.",
+          variant: "destructive",
+        });
+        e2eeNoticeRef.current = "error";
+      }
+    };
+
+    void loadE2eeKey();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, selectedHangout?.group_chat?.group_id, token]);
+
+  useEffect(() => {
     if (activeTab !== "chat") return;
 
     if (shouldAutoScrollRef.current) {
@@ -439,6 +492,13 @@ const SocialPage = () => {
     }
 
     if (!messageDraft.trim()) return;
+    if (!groupKey) {
+      toast({
+        title: "Secure chat not ready",
+        description: "Wait for encryption keys before sending text.",
+      });
+      return;
+    }
 
     setSendingMessage(true);
     try {
@@ -446,10 +506,7 @@ const SocialPage = () => {
         selectedHangout.group_chat.group_id,
         {
           messageType: "text",
-          payload: {
-            kind: "text",
-            text: messageDraft.trim(),
-          },
+          payload: encryptTextPayload(messageDraft.trim(), groupKey),
         },
         token,
       );
@@ -1042,7 +1099,8 @@ const SocialPage = () => {
                         {!loadingMessages &&
                           messages.map((message) => {
                             const isMine = currentUserId && message.sender_id === currentUserId;
-                            const payload = message.payload || { kind: "text", text: message.text || "" };
+                            const rawPayload = message.payload || { kind: "text", text: message.text || "" };
+                            const payload = resolveTextPayload(rawPayload, groupKey);
 
                             return (
                               <div key={message.message_id} className={`mb-2 flex ${isMine ? "justify-end" : "justify-start"}`}>
@@ -1286,7 +1344,11 @@ const SocialPage = () => {
                         />
                         <Button
                           onClick={() => void handleSendMessage()}
-                          disabled={sendingMessage || (!messageDraft.trim() && !selectedMediaFile)}
+                          disabled={
+                            sendingMessage ||
+                            (!messageDraft.trim() && !selectedMediaFile) ||
+                            (messageDraft.trim() && !groupKey)
+                          }
                         >
                           {sendingMessage ? "Sending..." : "Send"}
                         </Button>

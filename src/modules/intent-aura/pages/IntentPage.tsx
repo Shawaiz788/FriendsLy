@@ -36,11 +36,10 @@ const IntentPage = () => {
 
   const toggleActiveIntent = (label: string) => {
     hasLocalChanges.current = true;
-    setActiveIntents((prev) =>
-      prev.includes(label)
-        ? prev.filter((l) => l !== label)
-        : [...prev, label]
-    );
+    setActiveIntents((prev) => {
+      if (prev.length === 1 && prev[0] === label) return prev;
+      return [label];
+    });
   };
 
 

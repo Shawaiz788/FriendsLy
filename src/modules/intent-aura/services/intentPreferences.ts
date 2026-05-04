@@ -43,4 +43,9 @@ export const loadIntentPreferences = (): IntentPreferences => {
 
 export const saveIntentPreferences = (preferences: IntentPreferences) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+  window.dispatchEvent(
+    new CustomEvent("intent-preferences-updated", {
+      detail: preferences,
+    }),
+  );
 };

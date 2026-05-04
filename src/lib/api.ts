@@ -1,3 +1,18 @@
+export interface Story {
+  story_id: string;
+  user_id: string;
+  media_url: string;
+  media_type: 'image' | 'video';
+  expires_at: string;  // ISO date
+  visibility?: string;
+  created_at?: string;
+  author?: {
+    full_name: string | null;
+    username: string | null;
+    profile_photo_url: string | null;
+  };
+}
+
 // Backward-compatible API barrel for legacy imports.
 // New code should import from module service files directly.
 import { API_BASE } from "@/lib/apiBase";

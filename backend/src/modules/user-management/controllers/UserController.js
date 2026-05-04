@@ -165,7 +165,7 @@ const UserController = {
       const authenticatedSupabase = await createAuthenticatedClient(token);
       const { data, error } = await authenticatedSupabase
         .from('user_intent_preferences')
-        .select('active_intent, enabled_intents, inner_radius_km, outer_radius_km, auto_expire')
+        .select('active_intent, active_intents, enabled_intents, inner_radius_km, outer_radius_km, auto_expire')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -183,6 +183,7 @@ const UserController = {
         console.log('No intent preferences found for user, creating defaults:', userId);
         const defaultPrefs = {
           active_intent: 'Free',
+          active_intents: ['Free'],
           enabled_intents: ['Free', 'Busy', 'Studying', 'Hungry', 'Working', 'Exercising', 'Just Chilling'],
           inner_radius_km: 1,
           outer_radius_km: 5,
@@ -192,19 +193,50 @@ const UserController = {
         const { data: createdData, error: createError } = await authenticatedSupabase
           .from('user_intent_preferences')
           .insert([{ user_id: userId, ...defaultPrefs }])
-          .select('active_intent, enabled_intents, inner_radius_km, outer_radius_km, auto_expire')
+          .select('active_intent, active_intents, enabled_intents, inner_radius_km, outer_radius_km, auto_expire')
           .single();
 
         if (createError) {
           // Log the error but don't fail - return defaults
           console.log('Warning: Could not create default intent preferences:', createError.message);
-          return res.json({ data: defaultPrefs });
+          return res.json({
+            data: {
+              active_intents: defaultPrefs.active_intents,
+              enabled_intents: defaultPrefs.enabled_intents,
+              inner_radius_km: defaultPrefs.inner_radius_km,
+              outer_radius_km: defaultPrefs.outer_radius_km,
+              auto_expire: defaultPrefs.auto_expire,
+            },
+          });
         }
 
-        return res.json({ data: createdData || defaultPrefs });
+        const normalized = createdData || defaultPrefs;
+        return res.json({
+          data: {
+            active_intents:
+              Array.isArray(normalized.active_intents) && normalized.active_intents.length
+                ? normalized.active_intents
+                : [normalized.active_intent || 'Free'],
+            enabled_intents: normalized.enabled_intents,
+            inner_radius_km: normalized.inner_radius_km,
+            outer_radius_km: normalized.outer_radius_km,
+            auto_expire: normalized.auto_expire,
+          },
+        });
       }
 
-      return res.json({ data });
+      return res.json({
+        data: {
+          active_intents:
+            Array.isArray(data.active_intents) && data.active_intents.length
+              ? data.active_intents
+              : [data.active_intent || 'Free'],
+          enabled_intents: data.enabled_intents,
+          inner_radius_km: data.inner_radius_km,
+          outer_radius_km: data.outer_radius_km,
+          auto_expire: data.auto_expire,
+        },
+      });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -244,6 +276,7 @@ const UserController = {
         .upsert(
           {
             user_id: userId,
+            active_intent: active_intents[0],
             active_intents,
             enabled_intents,
             inner_radius_km,
@@ -341,6 +374,7 @@ const UserController = {
       {
         user_id: authData.user.id,
         active_intent: 'Free',
+        active_intents: ['Free'],
         enabled_intents: ['Free', 'Busy', 'Studying', 'Hungry', 'Working', 'Exercising', 'Just Chilling'],
         inner_radius_km: 1,
         outer_radius_km: 5,
@@ -1099,13 +1133,43 @@ const UserController = {
 
       const locationByUserId = new Map((locations || []).map((location) => [location.user_id, location]));
 
+      const { data: intentRows, error: intentError } = await authenticatedSupabase
+        .from('user_intent_preferences')
+        .select('user_id, active_intent, active_intents, inner_radius_km, outer_radius_km')
+        .in('user_id', friendIds);
+
+      if (intentError) {
+        if (intentError.code === '42P01') {
+          return res.status(500).json({
+            error: 'user_intent_preferences table is missing. Apply schema changes first.',
+          });
+        }
+        return res.status(400).json({ error: intentError.message });
+      }
+
+      const intentsByUserId = new Map((intentRows || []).map((row) => [row.user_id, row]));
+
       const data = (profiles || []).map((profile) => {
         const location = locationByUserId.get(profile.user_id);
+        const intentPrefs = intentsByUserId.get(profile.user_id);
+        const normalizedActiveIntents =
+          Array.isArray(intentPrefs?.active_intents) && intentPrefs.active_intents.length
+            ? intentPrefs.active_intents
+            : intentPrefs?.active_intent
+              ? [intentPrefs.active_intent]
+              : ['Free'];
+        const normalizedInnerRadius =
+          typeof intentPrefs?.inner_radius_km === 'number' ? intentPrefs.inner_radius_km : 1;
+        const normalizedOuterRadius =
+          typeof intentPrefs?.outer_radius_km === 'number' ? intentPrefs.outer_radius_km : 5;
         return {
           ...profile,
           latitude: location?.latitude ?? null,
           longitude: location?.longitude ?? null,
           location_updated_at: location?.updated_at ?? null,
+          active_intents: normalizedActiveIntents,
+          inner_radius_km: normalizedInnerRadius,
+          outer_radius_km: normalizedOuterRadius,
         };
       });
 

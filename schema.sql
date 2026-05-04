@@ -80,6 +80,7 @@ CREATE TABLE user_locations (
 CREATE TABLE user_intent_preferences (
     user_id UUID PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
     active_intent VARCHAR(100) NOT NULL DEFAULT 'Free',
+    active_intents TEXT[] NOT NULL DEFAULT ARRAY['Free'],
     enabled_intents TEXT[] NOT NULL DEFAULT ARRAY['Free','Busy','Studying','Hungry','Working','Exercising','Just Chilling'],
     inner_radius_km DOUBLE PRECISION NOT NULL DEFAULT 1,
     outer_radius_km DOUBLE PRECISION NOT NULL DEFAULT 5,

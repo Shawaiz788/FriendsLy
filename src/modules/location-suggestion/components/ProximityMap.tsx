@@ -19,6 +19,10 @@ export interface PositionedFriend {
   lng: number;
   avatarUrl?: string;
   auraEmoji?: string;
+  friendActiveIntents?: string[];
+  friendInnerRadiusKm?: number | null;
+  friendOuterRadiusKm?: number | null;
+  distanceKm?: number;
 }
 
 export const mockFriends: Friend[] = [

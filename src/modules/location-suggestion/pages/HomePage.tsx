@@ -110,11 +110,15 @@ const HomePage = () => {
       profile_photo_url: string | null;
       latitude: number | null;
       longitude: number | null;
+      active_intents?: string[] | null;
+      inner_radius_km?: number | null;
+      outer_radius_km?: number | null;
     }>
   >([]);
   const [startingSuggestionFor, setStartingSuggestionFor] = useState<string | null>(null);
   const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
   const [snoozeUntilByUser, setSnoozeUntilByUser] = useState<Record<string, number>>(() => loadHangoutSnoozeMap());
+  const [snoozeTick, setSnoozeTick] = useState(0);
   const [inviteCount, setInviteCount] = useState(0);
   const [nearbyHighlights, setNearbyHighlights] = useState<MediaPost[]>([]);
   const [trendingActivities, setTrendingActivities] = useState<
@@ -187,6 +191,26 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
+    const handlePreferencesUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        activeIntents: string[];
+        innerRadiusKm: number;
+        outerRadiusKm: number;
+        autoExpire: boolean;
+      }>;
+
+      if (customEvent?.detail) {
+        applyPreferences(customEvent.detail, false);
+      }
+    };
+
+    window.addEventListener("intent-preferences-updated", handlePreferencesUpdated);
+    return () => {
+      window.removeEventListener("intent-preferences-updated", handlePreferencesUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!token) return;
 
     const loadInvites = async () => {
@@ -203,6 +227,33 @@ const HomePage = () => {
     const intervalId = window.setInterval(loadInvites, 15_000);
     return () => window.clearInterval(intervalId);
   }, [token]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      setSnoozeTick(now);
+      setSnoozeUntilByUser((prev) => {
+        let changed = false;
+        const next: Record<string, number> = {};
+        for (const [userId, until] of Object.entries(prev)) {
+          if (typeof until === "number" && until > now) {
+            next[userId] = until;
+          } else {
+            changed = true;
+          }
+        }
+        if (changed) {
+          saveHangoutSnoozeMap(next);
+          return next;
+        }
+        return prev;
+      });
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   // Load nearby highlights
   useEffect(() => {
@@ -423,18 +474,30 @@ const HomePage = () => {
         const presence: PositionedFriend["presence"] =
           distanceKm <= innerRadiusKm ? "nearby" : distanceKm <= outerRadiusKm ? "city" : "away";
 
+        const friendActiveIntents = Array.isArray(friend.active_intents)
+          ? friend.active_intents.filter((value: unknown): value is string => typeof value === "string")
+          : [];
+        const friendInnerRadiusKm =
+          typeof friend.inner_radius_km === "number" ? friend.inner_radius_km : null;
+        const friendOuterRadiusKm =
+          typeof friend.outer_radius_km === "number" ? friend.outer_radius_km : null;
+
         // Generate consistent Aura emoji per friend
         const emojiIndex = friendSeed % auraEmojis.length;
 
         return {
           userId: friend.user_id,
           name: friend.full_name,
-          intent: friend.bio ? friend.bio : "Available",
+          intent: friendActiveIntents[0] || (friend.bio ? friend.bio : "Available"),
           presence,
           lat: approxLat,
           lng: approxLng,
           avatarUrl: friend.profile_photo_url || undefined,
           auraEmoji: auraEmojis[emojiIndex],
+          friendActiveIntents,
+          friendInnerRadiusKm,
+          friendOuterRadiusKm,
+          distanceKm,
         };
       });
 
@@ -444,15 +507,31 @@ const HomePage = () => {
 
   const suggestedHangouts = useMemo(() => {
     const now = Date.now();
+    const userActiveIntents = loadIntentPreferences().activeIntents.filter(
+      (value) => typeof value === "string" && value.trim(),
+    );
     return mapFriends
       .filter((friend) => (friend.presence === "nearby" || friend.presence === "city") && !!friend.userId)
+      .filter((friend) => {
+        const friendIntents = friend.friendActiveIntents || [];
+        if (!userActiveIntents.length || !friendIntents.length) return false;
+        const hasIntentOverlap = userActiveIntents.some((intent) => friendIntents.includes(intent));
+        if (!hasIntentOverlap) return false;
+
+        const friendInner = typeof friend.friendInnerRadiusKm === "number" ? friend.friendInnerRadiusKm : innerRadiusKm;
+        const friendOuter = typeof friend.friendOuterRadiusKm === "number" ? friend.friendOuterRadiusKm : outerRadiusKm;
+        const distanceKm = typeof friend.distanceKm === "number" ? friend.distanceKm : Number.POSITIVE_INFINITY;
+        const minOuter = Math.min(outerRadiusKm, friendOuter);
+        const maxInner = Math.max(innerRadiusKm, friendInner);
+        return distanceKm >= maxInner && distanceKm <= minOuter;
+      })
       .filter((friend) => !dismissedSuggestions.includes(friend.userId!))
       .filter((friend) => {
         const until = snoozeUntilByUser[friend.userId!];
         return !until || until <= now;
       })
       .slice(0, 3);
-  }, [dismissedSuggestions, mapFriends, snoozeUntilByUser]);
+  }, [activeIntents, dismissedSuggestions, innerRadiusKm, mapFriends, outerRadiusKm, snoozeTick, snoozeUntilByUser]);
 
   const handleManualLocationUpdate = async () => {
     if (!token) {

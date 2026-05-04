@@ -32,18 +32,33 @@ export async function getMyIntentPreferences(token: string) {
 
 export async function upsertMyIntentPreferences(preferences: IntentPreferences, token: string) {
   try {
+    const sanitizedActive = Array.isArray(preferences.activeIntents)
+      ? preferences.activeIntents.filter((v): v is string => typeof v === "string")
+      : [];
+
+    if (sanitizedActive.length === 0) {
+      console.error('Cannot upsert intent preferences: activeIntents is empty or invalid', preferences);
+      return {
+        success: false,
+        error: 'active_intents must be a non-empty array of strings',
+      };
+    }
+
+    const payload = {
+      active_intents: sanitizedActive,
+      enabled_intents: sanitizedActive,
+      inner_radius_km: preferences.innerRadiusKm,
+      outer_radius_km: preferences.outerRadiusKm,
+      auto_expire: preferences.autoExpire,
+    };
+
     const res = await fetch(`${API_BASE}/api/user/intent-preferences`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        active_intents: preferences.activeIntents,
-        inner_radius_km: preferences.innerRadiusKm,
-        outer_radius_km: preferences.outerRadiusKm,
-        auto_expire: preferences.autoExpire,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const responseText = await res.text();

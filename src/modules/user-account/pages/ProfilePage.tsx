@@ -20,6 +20,17 @@ import {
 } from "@/components/ui/dialog";
 import { deactivateAccount, deleteAccount, editProfile, logoutAllSessions, logoutCurrentSession, updateMyLocation } from "@/lib/api";
 import { API_BASE } from "@/lib/apiBase";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  clearPreferencesBeforeQuiet,
+  loadNotificationPreferences,
+  loadPreferencesBeforeQuiet,
+  loadQuietHours,
+  savePreferencesBeforeQuiet,
+  saveNotificationPreferences,
+  saveQuietHours,
+  type NotificationPreferences,
+} from "@/modules/user-account/services/notificationPreferences";
 
 async function fetchProfile(token) {
   // Get user id from token
@@ -67,6 +78,10 @@ const ProfilePage = () => {
   const [editError, setEditError] = useState("");
   const [editSuccess, setEditSuccess] = useState(false);
   const [quietHours, setQuietHours] = useState(false);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(
+    DEFAULT_NOTIFICATION_PREFERENCES,
+  );
+  const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState("sage-coral");
   const lastLightThemeRef = useRef("sandy");
@@ -312,6 +327,11 @@ const ProfilePage = () => {
         }
       });
     }
+  }, []);
+
+  useEffect(() => {
+    setNotificationPrefs(loadNotificationPreferences());
+    setQuietHours(loadQuietHours());
   }, []);
   // Also reload profile after edit
   useEffect(() => {
@@ -906,11 +926,34 @@ const ProfilePage = () => {
                   <Bell className="w-4 h-4 text-primary" />
                   <p className="text-sm font-medium">Notification management</p>
                 </div>
-                <Button variant="outline" size="sm">Customize</Button>
+                <Button variant="outline" size="sm" onClick={() => setNotificationDialogOpen(true)}>
+                  Customize
+                </Button>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Quiet hours</span>
-                <Switch checked={quietHours} onCheckedChange={setQuietHours} />
+                <Switch
+                  checked={quietHours}
+                  onCheckedChange={(value) => {
+                    setQuietHours(value);
+                    saveQuietHours(value);
+                    if (value) {
+                      savePreferencesBeforeQuiet(notificationPrefs);
+                      const muted = {
+                        messages: false,
+                        hangoutInvites: false,
+                        friendRequests: false,
+                      };
+                      setNotificationPrefs(muted);
+                      saveNotificationPreferences(muted);
+                    } else {
+                      const restored = loadPreferencesBeforeQuiet() || DEFAULT_NOTIFICATION_PREFERENCES;
+                      setNotificationPrefs(restored);
+                      saveNotificationPreferences(restored);
+                      clearPreferencesBeforeQuiet();
+                    }
+                  }}
+                />
               </div>
             </div>
 
@@ -964,6 +1007,76 @@ const ProfilePage = () => {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={notificationDialogOpen} onOpenChange={setNotificationDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Notification preferences</DialogTitle>
+              <DialogDescription>Pick which alerts you want to receive.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Unread messages</p>
+                  <p className="text-xs text-muted-foreground">Direct chats and hangout group updates</p>
+                </div>
+                <Checkbox
+                  checked={notificationPrefs.messages}
+                  onCheckedChange={(checked) => {
+                    const next = { ...notificationPrefs, messages: Boolean(checked) };
+                    setNotificationPrefs(next);
+                    saveNotificationPreferences(next);
+                    if (quietHours && checked) {
+                      setQuietHours(false);
+                      saveQuietHours(false);
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Hangout suggestions</p>
+                  <p className="text-xs text-muted-foreground">Invites and activity nudges</p>
+                </div>
+                <Checkbox
+                  checked={notificationPrefs.hangoutInvites}
+                  onCheckedChange={(checked) => {
+                    const next = { ...notificationPrefs, hangoutInvites: Boolean(checked) };
+                    setNotificationPrefs(next);
+                    saveNotificationPreferences(next);
+                    if (quietHours && checked) {
+                      setQuietHours(false);
+                      saveQuietHours(false);
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Friend requests</p>
+                  <p className="text-xs text-muted-foreground">New connection requests</p>
+                </div>
+                <Checkbox
+                  checked={notificationPrefs.friendRequests}
+                  onCheckedChange={(checked) => {
+                    const next = { ...notificationPrefs, friendRequests: Boolean(checked) };
+                    setNotificationPrefs(next);
+                    saveNotificationPreferences(next);
+                    if (quietHours && checked) {
+                      setQuietHours(false);
+                      saveQuietHours(false);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setNotificationDialogOpen(false)}>
+                Done
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Card className="glass-card rounded-2xl border-border/50 mb-4">
           <CardHeader className="pb-3">

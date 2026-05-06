@@ -81,6 +81,8 @@ router.get('/friends/locations', requireAuth, UserController.getFriendsLocations
 router.post('/location', requireAuth, UserController.updateMyLocation);
 router.get('/intent-preferences', requireAuth, UserController.getMyIntentPreferences);
 router.put('/intent-preferences', requireAuth, UserController.upsertMyIntentPreferences);
+router.get('/notifications', requireAuth, UserController.getNotifications);
+router.post('/notifications/:notificationId/read', requireAuth, UserController.markNotificationRead);
 router.get('/friend-requests/incoming', requireAuth, UserController.getIncomingFriendRequests);
 router.post('/hangouts/suggested/accept', requireAuth, HangoutController.acceptSuggestedHangout);
 router.get('/hangouts/invites', requireAuth, HangoutController.getMyHangoutInvites);

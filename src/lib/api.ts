@@ -224,6 +224,24 @@ export async function getCollaborativePosts(token: string) {
   return res.json();
 }
 
+export async function getMyNotifications(token: string) {
+  const res = await fetch(`${API_BASE}/api/user/notifications`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+export async function markNotificationRead(notificationId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/notifications/${notificationId}/read`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return res.json();
+}
+
 export async function updateCollaborativePost(postId: string, data: {
   content?: string;
   media_url?: string;

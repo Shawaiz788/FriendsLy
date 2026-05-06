@@ -954,6 +954,17 @@ const UserController = {
       }
 
       console.log('✅ Friend request sent from', requester_id, 'to', addressee_id, 'Result:', insertResult);
+      const { error: notificationError } = await authenticatedSupabase.from('notifications').insert([
+        {
+          user_id: addressee_id,
+          type: 'friend_request',
+          reference_id: requester_id,
+        },
+      ]);
+
+      if (notificationError) {
+        console.log('⚠️ Could not create friend request notification:', notificationError);
+      }
       res.json({ success: true, message: 'Friend request sent' });
     } catch (err) {
       console.log('💥 Exception in sendFriendRequest:', err);
@@ -1008,6 +1019,16 @@ const UserController = {
         .eq('addressee_id', addressee_id);
 
       if (error) return res.status(400).json({ error: error.message });
+      const { error: notificationClearError } = await authenticatedSupabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', addressee_id)
+        .eq('type', 'friend_request')
+        .eq('reference_id', requester_id);
+
+      if (notificationClearError) {
+        console.log('⚠️ Unable to clear friend request notification:', notificationClearError);
+      }
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1033,6 +1054,16 @@ const UserController = {
         .eq('addressee_id', addressee_id);
 
       if (error) return res.status(400).json({ error: error.message });
+      const { error: notificationClearError } = await authenticatedSupabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', addressee_id)
+        .eq('type', 'friend_request')
+        .eq('reference_id', requester_id);
+
+      if (notificationClearError) {
+        console.log('⚠️ Unable to clear friend request notification:', notificationClearError);
+      }
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1299,6 +1330,253 @@ const UserController = {
     } catch (err) {
       console.log('💥 Exception in getIncomingFriendRequests:', err);
       res.status(500).json({ error: err.message });
+    }
+  },
+  async getNotifications(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { data: notifications, error: notificationsError } = await authenticatedSupabase
+        .from('notifications')
+        .select('notification_id, type, reference_id, is_read, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(60);
+
+      if (notificationsError) {
+        return res.status(400).json({ error: formatSupabaseError(notificationsError, 'Failed to load notifications') });
+      }
+
+      const rows = notifications || [];
+
+      const friendRequestIds = rows
+        .filter((row) => row.type === 'friend_request' && row.reference_id)
+        .map((row) => row.reference_id);
+      const hangoutIds = rows
+        .filter((row) => (row.type === 'hangout_invite' || row.type === 'hangout_joined') && row.reference_id)
+        .map((row) => row.reference_id);
+      const messageRefs = rows
+        .filter((row) => row.type === 'message' && row.reference_id)
+        .map((row) => row.reference_id);
+
+      const uniqueIds = (items) => Array.from(new Set(items.filter(Boolean)));
+      const friendIds = uniqueIds(friendRequestIds);
+      const hangoutIdList = uniqueIds(hangoutIds);
+      const messageRefList = uniqueIds(messageRefs);
+
+      let friendProfilesById = {};
+      if (friendIds.length) {
+        const { data: profiles, error: profileError } = await authenticatedSupabase
+          .from('user_profiles')
+          .select('user_id, full_name, username, profile_photo_url')
+          .in('user_id', friendIds);
+
+        if (profileError) {
+          return res.status(400).json({ error: formatSupabaseError(profileError, 'Failed to load profiles') });
+        }
+
+        friendProfilesById = Object.fromEntries((profiles || []).map((row) => [row.user_id, row]));
+      }
+
+      let hangoutsById = {};
+      let creatorProfilesById = {};
+      if (hangoutIdList.length) {
+        const { data: hangouts, error: hangoutError } = await authenticatedSupabase
+          .from('hangouts')
+          .select('hangout_id, title, description, creator_id')
+          .in('hangout_id', hangoutIdList);
+
+        if (hangoutError) {
+          return res.status(400).json({ error: formatSupabaseError(hangoutError, 'Failed to load hangouts') });
+        }
+
+        hangoutsById = Object.fromEntries((hangouts || []).map((row) => [row.hangout_id, row]));
+
+        const creatorIds = uniqueIds((hangouts || []).map((row) => row.creator_id));
+        if (creatorIds.length) {
+          const { data: creators, error: creatorError } = await authenticatedSupabase
+            .from('user_profiles')
+            .select('user_id, full_name, username, profile_photo_url')
+            .in('user_id', creatorIds);
+
+          if (creatorError) {
+            return res.status(400).json({ error: formatSupabaseError(creatorError, 'Failed to load creators') });
+          }
+
+          creatorProfilesById = Object.fromEntries((creators || []).map((row) => [row.user_id, row]));
+        }
+      }
+
+      let messagesByRef = {};
+      let senderProfilesById = {};
+      let groupChatsById = {};
+      let groupMembersByGroupId = {};
+
+      if (messageRefList.length) {
+        const { data: messageByIdRows, error: messageError } = await authenticatedSupabase
+          .from('messages')
+          .select('message_id, group_id, sender_id, message_type, created_at')
+          .in('message_id', messageRefList);
+
+        if (messageError) {
+          return res.status(400).json({ error: formatSupabaseError(messageError, 'Failed to load messages') });
+        }
+
+        const matchedMessageIds = new Set((messageByIdRows || []).map((row) => row.message_id));
+        const groupIdRefs = messageRefList.filter((ref) => !matchedMessageIds.has(ref));
+
+        const messagesById = Object.fromEntries((messageByIdRows || []).map((row) => [row.message_id, row]));
+        messagesByRef = { ...messagesByRef, ...messagesById };
+
+        let groupMessageRows = [];
+        if (groupIdRefs.length) {
+          const { data: groupMessages, error: groupMessageError } = await authenticatedSupabase
+            .from('messages')
+            .select('message_id, group_id, sender_id, message_type, created_at')
+            .in('group_id', groupIdRefs)
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+          if (groupMessageError) {
+            return res.status(400).json({ error: formatSupabaseError(groupMessageError, 'Failed to load messages') });
+          }
+
+          groupMessageRows = groupMessages || [];
+          const latestByGroup = {};
+          for (const message of groupMessageRows) {
+            if (!latestByGroup[message.group_id]) {
+              latestByGroup[message.group_id] = message;
+            }
+          }
+
+          for (const [groupId, message] of Object.entries(latestByGroup)) {
+            messagesByRef[groupId] = message;
+          }
+        }
+
+        const senderIds = uniqueIds([
+          ...Object.values(messagesByRef).map((row) => row.sender_id),
+        ]);
+        if (senderIds.length) {
+          const { data: senders, error: senderError } = await authenticatedSupabase
+            .from('user_profiles')
+            .select('user_id, full_name, username, profile_photo_url')
+            .in('user_id', senderIds);
+
+          if (senderError) {
+            return res.status(400).json({ error: formatSupabaseError(senderError, 'Failed to load senders') });
+          }
+
+          senderProfilesById = Object.fromEntries((senders || []).map((row) => [row.user_id, row]));
+        }
+
+        const groupIds = uniqueIds(Object.values(messagesByRef).map((row) => row.group_id));
+        if (groupIds.length) {
+          const { data: groupChats, error: groupChatError } = await authenticatedSupabase
+            .from('group_chats')
+            .select('group_id, hangout_id, is_temporary')
+            .in('group_id', groupIds);
+
+          if (groupChatError) {
+            return res.status(400).json({ error: formatSupabaseError(groupChatError, 'Failed to load group chats') });
+          }
+
+          groupChatsById = Object.fromEntries((groupChats || []).map((row) => [row.group_id, row]));
+
+          const { data: members, error: membersError } = await authenticatedSupabase
+            .from('group_members')
+            .select('group_id, user_id')
+            .in('group_id', groupIds);
+
+          if (membersError) {
+            return res.status(400).json({ error: formatSupabaseError(membersError, 'Failed to load group members') });
+          }
+
+          groupMembersByGroupId = (members || []).reduce((acc, row) => {
+            acc[row.group_id] = acc[row.group_id] || [];
+            acc[row.group_id].push(row.user_id);
+            return acc;
+          }, {});
+        }
+      }
+
+      const data = rows.map((row) => {
+        const actor = row.type === 'friend_request' ? friendProfilesById[row.reference_id] || null : null;
+        const hangout = hangoutsById[row.reference_id] || null;
+        const hangoutCreator = hangout ? creatorProfilesById[hangout.creator_id] || null : null;
+        const message = messagesByRef[row.reference_id] || null;
+        const groupChat = message ? groupChatsById[message.group_id] || null : null;
+        const members = message ? groupMembersByGroupId[message.group_id] || [] : [];
+        const counterpartUserId =
+          message && groupChat && !groupChat.hangout_id
+            ? members.find((memberId) => memberId !== userId) || null
+            : null;
+
+        return {
+          ...row,
+          actor,
+          hangout: hangout
+            ? {
+                hangout_id: hangout.hangout_id,
+                title: hangout.title,
+                description: hangout.description,
+                creator: hangoutCreator,
+              }
+            : null,
+          message: message
+            ? {
+                message_id: message.message_id,
+                group_id: message.group_id,
+                message_type: message.message_type,
+                sender: senderProfilesById[message.sender_id] || null,
+                hangout_id: groupChat?.hangout_id || null,
+                counterpart_user_id: counterpartUserId,
+              }
+            : null,
+        };
+      });
+
+      return res.json({ data });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+  async markNotificationRead(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { notificationId } = req.params;
+
+    if (!notificationId) {
+      return res.status(400).json({ error: 'notificationId is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+      const { error: updateError } = await authenticatedSupabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('notification_id', notificationId)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        return res.status(400).json({ error: formatSupabaseError(updateError, 'Failed to update notification') });
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
   },
 

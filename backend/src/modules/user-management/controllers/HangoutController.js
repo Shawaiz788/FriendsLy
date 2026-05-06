@@ -1112,6 +1112,48 @@ const HangoutController = {
 
       if (createMessageError) throw createMessageError;
 
+      const { data: groupMembers, error: membersError } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId);
+
+      if (membersError) {
+        console.log('⚠️ Unable to load group members for notifications:', membersError);
+      } else {
+        const recipientIds = (groupMembers || [])
+          .map((member) => member.user_id)
+          .filter((memberId) => memberId && memberId !== userId);
+
+        if (recipientIds.length) {
+          const { data: existingNotifications, error: existingError } = await supabase
+            .from('notifications')
+            .select('user_id')
+            .eq('type', 'message')
+            .eq('reference_id', groupId)
+            .eq('is_read', false)
+            .in('user_id', recipientIds);
+
+          if (existingError) {
+            console.log('⚠️ Unable to check message notifications:', existingError);
+          }
+
+          const existingRecipients = new Set((existingNotifications || []).map((row) => row.user_id));
+          const recipientsToNotify = recipientIds.filter((recipientId) => !existingRecipients.has(recipientId));
+
+          if (recipientsToNotify.length) {
+            const notificationRows = recipientsToNotify.map((recipientId) => ({
+              user_id: recipientId,
+              type: 'message',
+              reference_id: groupId,
+            }));
+            const { error: notificationError } = await supabase.from('notifications').insert(notificationRows);
+            if (notificationError) {
+              console.log('⚠️ Unable to create message notifications:', notificationError);
+            }
+          }
+        }
+      }
+
       const createdPayload = parseMessagePayload(createdMessage.encrypted_payload);
       return res.json({
         success: true,

@@ -11,7 +11,7 @@ import { Bell, Ghost } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useAuraPreferences } from "@/hooks/useAuraPreferences";
-import { acceptSuggestedHangout, getFriendsLocations, getMyHangoutInvites, updateMyLocation } from "@/lib/api";
+import { acceptSuggestedHangout, getFriendsLocations, getMyNotifications, updateMyLocation } from "@/lib/api";
 import {
   DEFAULT_INTENT_PREFERENCES,
   loadIntentPreferences,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/suggestionSnooze";
 import { getNearbyHighlights, getTrendingLocalActivities } from "@/modules/location-suggestion/services/locationApi";
 import type { MediaPost } from "@/modules/content-creation/services/mediaApi";
+import { loadNotificationPreferences, loadQuietHours } from "@/modules/user-account/services/notificationPreferences";
 
 const intents = [
   { label: "Free", emoji: "✌️" },
@@ -119,7 +120,7 @@ const HomePage = () => {
   const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
   const [snoozeUntilByUser, setSnoozeUntilByUser] = useState<Record<string, number>>(() => loadHangoutSnoozeMap());
   const [snoozeTick, setSnoozeTick] = useState(0);
-  const [inviteCount, setInviteCount] = useState(0);
+  const [alertCount, setAlertCount] = useState(0);
   const [nearbyHighlights, setNearbyHighlights] = useState<MediaPost[]>([]);
   const [trendingActivities, setTrendingActivities] = useState<
     Array<{
@@ -223,18 +224,55 @@ const HomePage = () => {
   useEffect(() => {
     if (!token) return;
 
-    const loadInvites = async () => {
+    const loadAlerts = async () => {
       try {
-        const result = await getMyHangoutInvites(token);
-        const count = Array.isArray(result?.data) ? result.data.length : 0;
-        setInviteCount(count);
+        const result = await getMyNotifications(token);
+        const prefs = loadNotificationPreferences();
+        const quietHours = loadQuietHours();
+
+        if (quietHours) {
+          setAlertCount(0);
+          return;
+        }
+
+        const notifications = Array.isArray(result?.data) ? result.data : [];
+        const filtered = notifications.filter((notification) => {
+          if (notification.type === "message") return prefs.messages;
+          if (notification.type === "friend_request") return prefs.friendRequests;
+          if (notification.type === "hangout_invite" || notification.type === "hangout_joined") {
+            return prefs.hangoutInvites;
+          }
+          return true;
+        });
+
+        const seenKeys = new Set<string>();
+        const dedupedUnread = filtered.filter((notification) => {
+          if (notification.is_read) return false;
+
+          let key = notification.notification_id;
+          if (notification.type === "message") {
+            key = `message:${notification.message?.group_id || notification.message?.counterpart_user_id || notification.reference_id}`;
+          } else if (notification.type === "friend_request") {
+            key = `friend_request:${notification.actor?.user_id || notification.reference_id}`;
+          } else if (notification.type === "hangout_invite") {
+            key = `hangout_invite:${notification.hangout?.hangout_id || notification.reference_id}`;
+          } else if (notification.type === "hangout_joined") {
+            key = `hangout_joined:${notification.hangout?.hangout_id || notification.reference_id}:${notification.actor?.user_id || ""}`;
+          }
+
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
+
+        setAlertCount(dedupedUnread.length);
       } catch {
-        setInviteCount(0);
+        setAlertCount(0);
       }
     };
 
-    void loadInvites();
-    const intervalId = window.setInterval(loadInvites, 15_000);
+    void loadAlerts();
+    const intervalId = window.setInterval(loadAlerts, 15_000);
     return () => window.clearInterval(intervalId);
   }, [token]);
 
@@ -737,9 +775,9 @@ const HomePage = () => {
             <Bell className="w-4 h-4" />
             Alerts
           </span>
-          {inviteCount > 0 ? (
+          {alertCount > 0 ? (
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
-              {inviteCount}
+              {alertCount}
             </span>
           ) : (
             <span className="text-xs text-muted-foreground">0</span>

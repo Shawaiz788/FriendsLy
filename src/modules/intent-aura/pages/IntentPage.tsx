@@ -100,7 +100,7 @@ const IntentPage = () => {
     <div className="min-h-screen bg-background pb-24">
       <div className="px-6 pt-6">
         <h1 className="font-serif text-2xl font-bold text-foreground mb-2">Intent & Aura</h1>
-        <p className="text-muted-foreground text-sm mb-6">Control how you appear to friends</p>
+        <p className="text-muted-foreground text-sm mb-6">Control how your aura appears</p>
 
         {/* Aura Customization */}
         <AuraCustomizer />

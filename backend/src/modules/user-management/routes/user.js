@@ -77,6 +77,7 @@ router.post('/logoutAll', requireAuth, UserController.logoutAll);
 // Friends & Search endpoints
 router.get('/search', requireAuth, UserController.searchUsers);
 router.get('/friends', requireAuth, UserController.getAcceptedFriends);
+router.delete('/friends', requireAuth, UserController.removeFriend);
 router.get('/friends/locations', requireAuth, UserController.getFriendsLocations);
 router.post('/location', requireAuth, UserController.updateMyLocation);
 router.get('/intent-preferences', requireAuth, UserController.getMyIntentPreferences);

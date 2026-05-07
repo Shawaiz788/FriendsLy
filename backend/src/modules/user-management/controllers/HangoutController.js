@@ -308,6 +308,33 @@ const ensureGroupMembership = async (supabase, groupId, userId) => {
   return true;
 };
 
+const getBlockSets = async (supabase, userId, otherIds) => {
+  if (!otherIds.length) {
+    return { blockedOut: new Set(), blockedIn: new Set() };
+  }
+
+  const { data: blockedOutRows, error: blockedOutError } = await supabase
+    .from('blocks')
+    .select('blocked_id')
+    .eq('blocker_id', userId)
+    .in('blocked_id', otherIds);
+
+  if (blockedOutError) throw blockedOutError;
+
+  const { data: blockedInRows, error: blockedInError } = await supabase
+    .from('blocks')
+    .select('blocker_id')
+    .eq('blocked_id', userId)
+    .in('blocker_id', otherIds);
+
+  if (blockedInError) throw blockedInError;
+
+  return {
+    blockedOut: new Set((blockedOutRows || []).map((row) => row.blocked_id)),
+    blockedIn: new Set((blockedInRows || []).map((row) => row.blocker_id)),
+  };
+};
+
 const parseMessagePayload = (rawPayload) => {
   if (!rawPayload) return { kind: 'text', text: '' };
 
@@ -729,14 +756,35 @@ const HangoutController = {
       const hasAccess = await ensureGroupMembership(supabase, groupId, userId);
       if (!hasAccess) return res.status(403).json({ error: 'You are not a member of this group chat' });
 
-      const { data: members, error: membersError } = await supabase
+      const { data: groupChat, error: groupChatError } = await supabase
+        .from('group_chats')
+        .select('group_id, is_temporary, hangout_id')
+        .eq('group_id', groupId)
+        .single();
+
+      if (groupChatError) throw groupChatError;
+
+      const { data: groupMembers, error: membersError } = await supabase
         .from('group_members')
         .select('user_id')
         .eq('group_id', groupId);
 
       if (membersError) throw membersError;
 
-      const memberIds = (members || []).map((row) => row.user_id);
+      const memberIds = (groupMembers || []).map((member) => member.user_id).filter(Boolean);
+      const otherMemberIds = memberIds.filter((memberId) => memberId !== userId);
+
+      if (
+        groupChat?.is_temporary === false &&
+        groupChat?.hangout_id === null &&
+        otherMemberIds.length === 1
+      ) {
+        const { blockedOut, blockedIn } = await getBlockSets(supabase, userId, otherMemberIds);
+        if (blockedOut.size || blockedIn.size) {
+          return res.status(403).json({ error: 'You cannot message this user' });
+        }
+      }
+
       if (!memberIds.length) return res.json({ data: [] });
 
       const { data: profiles, error: profilesError } = await supabase
@@ -890,6 +938,10 @@ const HangoutController = {
       if (messagesError) throw messagesError;
 
       const senderIds = Array.from(new Set((messages || []).map((message) => message.sender_id)));
+      const { blockedOut, blockedIn } = await getBlockSets(supabase, userId, senderIds);
+      const blockedSenderIds = new Set([...blockedOut, ...blockedIn]);
+      const visibleMessages = (messages || []).filter((message) => !blockedSenderIds.has(message.sender_id));
+
       let senderProfiles = [];
       if (senderIds.length) {
         const { data, error: senderProfilesError } = await supabase
@@ -902,7 +954,7 @@ const HangoutController = {
       }
       const senderByUserId = Object.fromEntries((senderProfiles || []).map((row) => [row.user_id, row]));
 
-      const parsedMessages = (messages || []).map((message) => {
+      const parsedMessages = visibleMessages.map((message) => {
         const payload = parseMessagePayload(message.encrypted_payload);
         return {
           ...message,
@@ -1111,11 +1163,6 @@ const HangoutController = {
         .single();
 
       if (createMessageError) throw createMessageError;
-
-      const { data: groupMembers, error: membersError } = await supabase
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', groupId);
 
       if (membersError) {
         console.log('⚠️ Unable to load group members for notifications:', membersError);

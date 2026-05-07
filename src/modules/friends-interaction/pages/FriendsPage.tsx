@@ -138,6 +138,8 @@ const FriendsPage = () => {
     f.username.toLowerCase().includes(search.toLowerCase())
   );
 
+  const friendIdSet = useMemo(() => new Set(friends.map((friend) => friend.user_id)), [friends]);
+
   const handleFindFriends = async (searchQuery: string) => {
     setQuery(searchQuery);
     if (!searchQuery.trim() || searchQuery.length < 2) {
@@ -165,14 +167,23 @@ const FriendsPage = () => {
 
       const statuses: Record<string, string> = {};
       for (const user of nextResults) {
-        try {
-          const status = await getFriendRequestStatus(user.user_id, token);
-          statuses[user.user_id] = status?.status || "none";
-        } catch {
-          statuses[user.user_id] = "none";
+        if (friendIdSet.has(user.user_id)) {
+          statuses[user.user_id] = "accepted";
+        } else {
+          statuses[user.user_id] = "loading";
         }
       }
       setRequestStatus(statuses);
+
+      for (const user of nextResults) {
+        if (friendIdSet.has(user.user_id)) continue;
+        try {
+          const status = await getFriendRequestStatus(user.user_id, token);
+          setRequestStatus((prev) => ({ ...prev, [user.user_id]: status?.status || "none" }));
+        } catch {
+          setRequestStatus((prev) => ({ ...prev, [user.user_id]: "none" }));
+        }
+      }
     } catch (err) {
       toast({
         title: "Could not search friends",
@@ -215,6 +226,13 @@ const FriendsPage = () => {
 
   const findButtonForStatus = (userId: string) => {
     const status = requestStatus[userId] || "none";
+    if (status === "loading") {
+      return (
+        <Button variant="soft" size="sm" disabled className="flex items-center gap-1">
+          Checking...
+        </Button>
+      );
+    }
     if (status === "accepted") {
       return (
         <Button variant="soft" size="sm" disabled className="flex items-center gap-1">
@@ -318,7 +336,18 @@ const FriendsPage = () => {
                 filtered.map((friend: Friend, i) => (
                   <div key={friend.user_id} style={{ animationDelay: `${i * 0.05}s` }}>
                     <div className="glass-card rounded-2xl p-4 flex items-center gap-3 animate-float-in">
-                      <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold overflow-hidden">
+                      <div
+                        className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold overflow-hidden cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => navigate(`/user/${friend.user_id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            navigate(`/user/${friend.user_id}`);
+                          }
+                        }}
+                      >
                         {friend.profile_photo_url && !friend.profile_photo_url.startsWith("blob:") ? (
                           <img
                             src={friend.profile_photo_url}
@@ -385,7 +414,18 @@ const FriendsPage = () => {
                     key={user.user_id}
                     className="glass-card rounded-xl p-4 flex items-center justify-between hover:bg-muted/30 transition-colors"
                   >
-                    <div className="flex items-center gap-3 flex-1">
+                    <div
+                      className="flex items-center gap-3 flex-1 cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/user/${user.user_id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/user/${user.user_id}`);
+                        }
+                      }}
+                    >
                       <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {user.profile_photo_url && !user.profile_photo_url.startsWith("blob:") ? (
                           <img

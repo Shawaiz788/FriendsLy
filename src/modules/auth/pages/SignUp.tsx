@@ -51,11 +51,30 @@ const SignUp = () => {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  const isStepOneComplete = Boolean(
+    form.name.trim() &&
+    form.username.trim() &&
+    form.email.trim() &&
+    form.phone.trim() &&
+    form.date_of_birth &&
+    form.gender
+  );
+
+  const isUsernameAvailable = usernameStatus === "available";
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSuccess(false);
     if (step === 1) {
+      if (!isStepOneComplete) {
+        setError("Please fill out all required fields.");
+        return;
+      }
+      if (!isUsernameAvailable) {
+        setError("Please choose an available username.");
+        return;
+      }
       setStep(2);
     } else {
       if (form.password !== form.confirmPassword) {
@@ -168,7 +187,13 @@ const SignUp = () => {
             </>
           )}
 
-          <Button variant="hero" size="xl" type="submit" className="w-full mt-4">
+          <Button
+            variant="hero"
+            size="xl"
+            type="submit"
+            className="w-full mt-4"
+            disabled={step === 1 && (!isStepOneComplete || !isUsernameAvailable || usernameStatus === "checking")}
+          >
             {step === 1 ? "Continue" : "Create Account"}
           </Button>
           {error && <div className="text-red-500 text-sm mt-2">{error}</div>}

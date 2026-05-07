@@ -984,7 +984,7 @@ const UserController = {
     try {
       const { data, error } = await supabase
         .from('friendships')
-        .select('status')
+        .select('status, requester_id, addressee_id')
         .or(
           `and(requester_id.eq.${requesterId},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${requesterId})`
         )
@@ -994,7 +994,11 @@ const UserController = {
         return res.json({ status: 'none' }); // No friendship
       }
 
-      res.json({ status: data.status });
+      const direction = data.status === 'pending'
+        ? (data.requester_id === requesterId ? 'outgoing' : 'incoming')
+        : 'none';
+
+      res.json({ status: data.status, direction });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -1121,6 +1125,45 @@ const UserController = {
     } catch (err) {
       console.log('💥 Exception in getAcceptedFriends:', err);
       res.status(500).json({ error: err.message });
+    }
+  },
+  async removeFriend(req, res) {
+    const supabase = getSupabase(req);
+    const token = req.supabaseToken;
+    const { friend_id } = req.body;
+
+    if (!friend_id) {
+      return res.status(400).json({ error: 'friend_id is required' });
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const userId = userData.user.id;
+
+    try {
+      const authenticatedSupabase = await createAuthenticatedClient(token);
+
+      const { data, error } = await authenticatedSupabase
+        .from('friendships')
+        .delete()
+        .eq('status', 'accepted')
+        .or(
+          `and(requester_id.eq.${userId},addressee_id.eq.${friend_id}),and(requester_id.eq.${friend_id},addressee_id.eq.${userId})`
+        )
+        .select('friendship_id');
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: 'Friendship not found' });
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
   },
   async updateMyLocation(req, res) {
@@ -1796,6 +1839,14 @@ const UserController = {
       ]);
 
       if (error) return res.status(400).json({ error: error.message });
+
+      await authenticatedSupabase
+        .from('friendships')
+        .delete()
+        .or(
+          `and(requester_id.eq.${userId},addressee_id.eq.${blocked_user_id}),and(requester_id.eq.${blocked_user_id},addressee_id.eq.${userId})`
+        );
+
       return res.status(201).json({ success: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });

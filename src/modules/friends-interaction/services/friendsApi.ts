@@ -77,3 +77,15 @@ export async function getAcceptedFriends(token: string) {
   });
   return parseResponseSafe(res);
 }
+
+export async function removeFriend(friendId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/user/friends`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ friend_id: friendId }),
+  });
+  return parseResponseSafe(res);
+}
